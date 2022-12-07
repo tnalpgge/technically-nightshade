@@ -23,7 +23,7 @@ Recently I found myself in a bit of a bind as someone who wants to write homebre
 
 Fortunately for me, a lot of that information is just background and hasn't actually been used in-game yet.  I decided to take the existing record of recent rulers from the same house and shift it to match my desired end date.  But that left a gap of almost 200 years, and I had to ensure that the succession wasn't totally bonkers during that time.
 
-Since I had used a very unsophisticated random generator on the previous iteration, I figured I'd codify it.  And because I was planning out my campaign in [[https://orgmode.org/][org-mode]] files, I could get [[https://www.gnu.org/software/emacs/][Emacs]] to generate stuff right there in my document.[fn:1]    And augment my existing table containing a human-friendly version of the royal historian's official account to treat a few columns in a more spreadsheet-like manner.  I could then publish the table minus a few key columns on the setting's web site and things would be golden.
+Since I had used a very unsophisticated random generator on the previous iteration, I figured I'd codify and improve it.  And because I was planning out my campaign in [[https://orgmode.org/][org-mode]] files, I could get [[https://www.gnu.org/software/emacs/][Emacs]] to generate stuff right there in my document.[fn:1]    And augment my existing table containing a human-friendly version of the royal historian's official account to treat a few columns in a more spreadsheet-like manner.  I could then publish the table minus a few key columns on the setting's web site and things would be golden.
 
 First, the matter of the royal historian's official account.  While I am no wizard at Emacs Lisp, I know enough of it and Emacs self-documenting facilities to bludgeon my way to something that works.
 
@@ -41,7 +41,7 @@ The first such fixed points were the names of the royal houses vying for the thr
 
 I found that using ~defvar~ instead of ~setq~ got in the way of frequent re-evaluation of the code block.  If this were code that I planned to distribute to others in a convenient form then I would learn all the nuances of the various ways of setting variables or constants, but this is really for my own convenience.
 
-Occasionally one house cannot hold on to the throne, and they are deposed.  I decided that there was a roughly 1 in 3 chance of the throne changing hands when a ruler's reign ended, so I expressed that as a list of booleans from which I would eventually select a random element.  ~nil~ means the throne remains with the same house when the ruler changes.
+Occasionally one house cannot hold on to the throne, and they are deposed.  I decided that there was a roughly 1 in 3 chance of the throne changing hands when a ruler's reign ended, so I expressed that as a list of booleans from which I would eventually select a random element.  ~nil~ means the throne remains with the same house when the ruler changes.  ~t~ indicates a change of house, and possibly a bloody and messy interregnum.  (But I will leave that to the professionals to describe in gory detail.)
 
 #+begin_src elisp
   (setq reign/maybe-change-of-house (list nil nil t))
@@ -85,7 +85,7 @@ Since this is Lisp, you will be seeing a lot of recursive functions from here on
 	new-house)))
 #+end_src
 
-Now we get to the sticky matter of the gender of the ruler, if they have a consort, and the gender of their consort.  A lookup table for ~reign/consort-gender-lookup~ would have been difficult to understand; the function expresses the intent much more clearly: ~x~ means that the consort is always ~x~, ~t~ means that the ruler and consort are the same gender, ~nil~ means a more traditional couple.
+Now we get to the sticky matter of the gender of the ruler, if they have a consort, and the gender of their consort.  A lookup table for ~reign/consort-gender-lookup~ would have been difficult to understand, but as a function I can express the intent much more clearly.  ~x~ means that the consort is gender non-conforming, ~t~ means that the ruler and consort are the same gender, ~nil~ means a more traditional couple.
 
 #+begin_src elisp
   (defun reign/ruler-gender () (seq-random-elt reign/ruler-genders))
@@ -200,7 +200,7 @@ But I have start years and durations and end years in the data I just generated.
 
 Whenever I type that lovely ~C-c C-c~ on each ~TBLFM~ line it fills in the cells that are derived information, in a consistent format.  So I can then copy this table to the web site -- also written in org, because I'm lazy and the [[https://github.com/github/markup][Github Markup library]] that powers Github wikis supports it -- and just remove the first three columns of the table by moving my cursor to each column and invoking ~M-x org-table-delete-column~.
 
-[fn:1] Yes, [[https://orgroam.com/][org-roam]] is involved, but it is not the focus of this post.
+[fn:1] Yes, [[https://orgroam.com/][org-roam]] is involved, but it is not the focus of this article.
 
 [fn:2] Non-binary, transgender, and gender-non-conforming folk are welcome as players at the table and as characters in the setting as well.  Modeling both sex and gender in the code would not add much educational value from a computing perspective, but could be interesting for describing a society that more closely resembles where I live.
 * Posts
