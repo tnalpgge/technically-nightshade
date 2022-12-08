@@ -1,5 +1,5 @@
 #+hugo_base_dir: .
-* Nightshade, Technically
+* Technically Nightshade
 :PROPERTIES:
 :EXPORT_HUGO_SECTION:
 :EXPORT_FILE_NAME: _index
@@ -85,7 +85,7 @@ Since this is Lisp, you will be seeing a lot of recursive functions from here on
 	new-house)))
 #+end_src
 
-Now we get to the sticky matter of the gender of the ruler, if they have a consort, and the gender of their consort.  A lookup table for ~reign/consort-gender-lookup~ would have been difficult to understand, but as a function I can express the intent much more clearly.  ~x~ means that the consort is gender non-conforming, ~t~ means that the ruler and consort are the same gender, ~nil~ means a more traditional couple.
+Now we get to the sticky matter of the gender of the ruler, if they have a consort, and the gender of their consort.  A lookup table for ~reign/consort-gender-lookup~ would have been difficult to understand, but as a function I can express the intent much more clearly.  ~x~ means that the consort is ender non-conforming, ~t~ means that the ruler and consort are the same gender, ~nil~ means a more traditional couple.
 
 #+begin_src elisp
   (defun reign/ruler-gender () (seq-random-elt reign/ruler-genders))
