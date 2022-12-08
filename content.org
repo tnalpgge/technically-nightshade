@@ -15,9 +15,14 @@
 * Posts
 :PROPERTIES:
 :EXPORT_HUGO_SECTION: posts
+:EXPORT_HUGO_MENU: :menu "main"
+:END:
+** Posts
+:PROPERTIES:
 :EXPORT_FILE_NAME: _index
 :EXPORT_HUGO_MENU: :menu "main"
 :END:
+- <2022-12-07 Wed> :: [[Generating Royal History]]
 ** Generating Royal History :ttrpg:procgen:emacs:orgmode:elisp:
 :PROPERTIES:
 :EXPORT_DATE: 2022-12-07
