@@ -2,4 +2,4 @@ baseURL = 'http://example.org/'
 languageCode = 'en-us'
 title = 'Technically Nightshade'
 theme = 'relearn'
-
+ignorefiles = ['~$']
