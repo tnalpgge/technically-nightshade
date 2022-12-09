@@ -6,12 +6,6 @@
 :EXPORT_HUGO_MENU: :menu "main"
 :END:
 ** Applied computing, for fun but not profit.
-* About
-:PROPERTIES:
-:EXPORT_HUGO_SECTION: about
-:EXPORT_FILE_NAME: _index
-:EXPORT_HUGO_MENU: :menu "main"
-:END:
 * Posts
 :PROPERTIES:
 :EXPORT_HUGO_SECTION: posts

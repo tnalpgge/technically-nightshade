@@ -1,0 +1,293 @@
++++
+title = "Generating Royal History"
+author = ["Tony"]
+date = 2022-12-07
+tags = ["ttrpg", "procgen", "emacs", "orgmode", "elisp"]
+draft = false
+[menu]
+  [menu.main]
+    weight = 2002
+    identifier = "generating-royal-history"
++++
+
+Recently I found myself in a bit of a bind as someone who wants to write homebrew content for a very popular tabletop role-playing game.  As is so common in many fantasy settings, there is some sort of feudal system, and there is some history of rulers, possibly with noble houses vying for power.  I had arbitrarily selected -- with the help of the [donjon Fantasy Calendar Generator](https://donjon.bin.sh/fantasy/calendar/) -- that the year in the setting was in the very late 600s.  But the information that I had posted on the web site for the setting said that the current year was in the mid-800s!  And I already had the names of the current rulers and their predecessors back for 250 years or so published to the setting web site.
+
+Fortunately for me, a lot of that information is just background and hasn't actually been used in-game yet.  I decided to take the existing record of recent rulers from the same house and shift it to match my desired end date.  But that left a gap of almost 200 years, and I had to ensure that the succession wasn't totally bonkers during that time.
+
+Since I had used a very unsophisticated random generator on the previous iteration, I figured I'd codify and improve it.  And because I was planning out my campaign in [org-mode](https://orgmode.org/) files, I could get [Emacs](https://www.gnu.org/software/emacs/) to generate stuff right there in my document.[^fn:1]    And augment my existing table containing a human-friendly version of the royal historian's official account to treat a few columns in a more spreadsheet-like manner.  I could then publish the table minus a few key columns on the setting's web site and things would be golden.
+
+First, the matter of the royal historian's official account.  While I am no wizard at Emacs Lisp, I know enough of it and Emacs self-documenting facilities to bludgeon my way to something that works.
+
+I will spare you the long saga of actually writing the generator and just present the finished bits of code, with commentary interspersed.  In my original document, all of the Emacs Lisp code for generating the royal historian's account is in a single `#+begin_src elisp` ... `#+end_src` block.
+
+I knew that I wanted to organize my generator by separating the data from the code, so I started out by plotting the fixed points.
+
+```elisp
+(setq reign/houses '(gondal zaman ashkani sial
+			  psarlay qambrani malyar
+			  jalbani baloch nazdana rodini))
+```
+
+The first such fixed points were the names of the royal houses vying for the throne.  I sourced them all from artisanal button-mashing on [Fantasy Name Generators](https://www.fantasynamegenerators.com/).  (To protect the ~~guilty~~ innocent, the names I give in this article are a bit different than the ones I use in the campaign.)
+
+I found that using `defvar` instead of `setq` got in the way of frequent re-evaluation of the code block.  If this were code that I planned to distribute to others in a convenient form then I would learn all the nuances of the various ways of setting variables or constants, but this is really for my own convenience.
+
+Occasionally one house cannot hold on to the throne, and they are deposed.  I decided that there was a roughly 1 in 3 chance of the throne changing hands when a ruler's reign ended, so I expressed that as a list of booleans from which I would eventually select a random element.  `nil` means the throne remains with the same house when the ruler changes.  `t` indicates a change of house, and possibly a bloody and messy interregnum.  (But I will leave that to the professionals to describe in gory detail.)
+
+```elisp
+(setq reign/maybe-change-of-house (list nil nil t))
+```
+
+There are many gender expressions in our modern world, and there are almost as many in this fantasy setting.  Because our nobles aren't the most enlightened people by modern standards, it is more common for them to have male rulers.  But female rulers are known to happen, and once in a while a ruler may eschew traditional gender (`x`) altogether.  (It's good to be the ~~king~~ ~~queen~~ monarch!)  So we'll assemble another table of probabilities: 3/6 male (`m`), 2/6 female (`f`), 1/6 other (`x`).[^fn:2]
+
+```elisp
+(setq reign/ruler-genders '(m m m f f x))
+```
+
+Sometimes a ruler may take a consort, and sometimes they won't.  I arbitrarily decided that it was a little more likely that they would have one (`t`) than not (`nil`).
+
+```elisp
+(setq reign/maybe-has-consort (list t t t nil nil))
+```
+
+And if the ruler took a consort, would the consort's gender match the ruler's?  More likely that the ruler and their consort would be a heterosexual couple (`nil`).  But we allow for same-gender couples (`t`) and even a consort who doesn't exhibit traditional gender (`x`).
+
+```elisp
+(setq reign/maybe-consort-gender (list nil nil nil nil nil t t t 'x))
+```
+
+To encourage some variation in the length of a ruler's reign, we'll roll 2d36.  Some reigns are short, some are long, most fall in the middle.
+
+```elisp
+(defun reign/duration () (+ (random 36) (random 36)))
+```
+
+Does another house steal the throne when the ruler changes?  If so, what house?  We can't choose the same house as we started with so `reign/change-of-house` will keep picking until we get something different.  The `seq-random-elt` function is quite literally the backbone of our generator, choosing one element at random from the sequence given as its argument.  Yes, the variables above were explicitly chosen with this function in mind.
+
+Since this is Lisp, you will be seeing a lot of recursive functions from here on out!
+
+```elisp
+(defun reign/new-house () (seq-random-elt reign/maybe-change-of-house))
+
+(defun reign/house () (seq-random-elt reign/houses))
+
+(defun reign/change-of-house (old-house)
+  (let ((new-house (reign/house)))
+    (if (eq new-house old-house)
+      (reign/change-of-house old-house)
+      new-house)))
+```
+
+Now we get to the sticky matter of the gender of the ruler, if they have a consort, and the gender of their consort.  A lookup table for `reign/consort-gender-lookup` would have been difficult to understand, but as a function I can express the intent much more clearly.  `x` means that the consort is ender non-conforming, `t` means that the ruler and consort are the same gender, `nil` means a more traditional couple.
+
+```elisp
+(defun reign/ruler-gender () (seq-random-elt reign/ruler-genders))
+
+(defun reign/has-consort () (seq-random-elt reign/maybe-has-consort))
+
+(defun reign/consort-gender () (seq-random-elt reign/maybe-consort-gender))
+
+(defun reign/consort-gender-lookup (ruler consort)
+  (cond ((eq consort 'x) consort)
+      ((and (eq ruler 'm) (not consort)) 'f)
+      ((and (eq ruler 'f) (not consort)) 'm)
+      (t ruler)))
+
+(defun reign/consort-gender (ruler-gender)
+  (let ((consort-gender (seq-random-elt reign/maybe-consort-gender)))
+    (reign/consort-gender-lookup ruler-gender consort-gender)))
+```
+
+So with all of our data structures defined, and a bunch of helper functions in the bag, we can generate one ruler's reign.  We'll express it as an alist, a list of pairs.  The first element of each pair will be a human-friendly name of an attribute of a ruler's reign; the second element will be the associated value.
+
+```elisp
+(defun reign/generate-one (current-house)
+  (let* ((duration (reign/duration))
+       (next-house (if (reign/new-house) (reign/change-of-house current-house) current-house))
+       (ruler-gender (reign/ruler-gender))
+       (has-consort (reign/has-consort))
+       (consort-gender (reign/consort-gender ruler-gender)))
+    (list
+     (cons 'duration duration)
+     (cons 'house next-house)
+     (cons 'ruler-gender ruler-gender)
+     (cons 'consort-gender (if has-consort consort-gender 'no-consort)))))
+```
+
+So we can generate a bunch of reigns that are disconnected from each other.  What we really wanted to do was fill a gap of a certain duration, knowing the start and end years, and the ruler's house as of the end year.
+
+Another recursive function to the rescue, this time one that keeps track of our history.  Instead of going forwards in time, this one goes backwards from the end, treating history as a stack, and we push older and older reigns onto the front of it.
+
+Our recursion base case can be when `end-year`, which we redefine on each recursion, has reached or overshot the `start-year`.  In that case we just return the accumulated `history` and say we have completed our task.
+
+If we've still got a ways to go, we can use `reign/generate-one` to generate the next earlier reign, and start picking it apart to make sure it doesn't run afoul of `start-year`, adjusting its professed duration and end year if necessary. Then we can augment the generated reign record with this additional information, add it to the front of our history, and continue to recurse back in time.  The functions `alist-get` and `assoc-delete-all` help us craft the adjusted reign record.
+
+```elisp
+(defun reign/generate-helper (start-year start-house end-year history)
+  (if (<= end-year start-year) history
+    (let* ((this-reign (reign/generate-one start-house))
+	 (house (alist-get 'house this-reign))
+	 (maybe-duration (alist-get 'duration this-reign))
+	 (duration-floor (- end-year start-year))
+	 (maybe-new-end-year (- end-year maybe-duration))
+	 (adjusted-duration (if (< maybe-new-end-year start-year) duration-floor maybe-duration))
+	 (new-end-year (if (<= maybe-new-end-year start-year) start-year maybe-new-end-year))
+	 (augmentation (list
+			(cons 'start-year new-end-year)
+			(cons 'end-year end-year)))
+	 (adjusted-duration-pair (cons 'duration adjusted-duration))
+	 (durationless-reign (assoc-delete-all 'duration this-reign))
+	 (adjusted-reign (cons adjusted-duration-pair durationless-reign))
+	 (reign-record (append augmentation adjusted-reign))
+	 (new-history (cons reign-record history)))
+      (reign/generate-helper start-year house new-end-year new-history))))
+```
+
+Now we can fill in the gap that we were so worried about!
+
+```elisp
+(setq reign/start-gap 611)
+(setq reign/end-house 'malyar)
+(setq reign/end-gap 784)
+
+(defun reign/generate-gap ()
+  (reign/generate-helper reign/start-gap reign/end-house reign/end-gap nil))
+```
+
+And since we have this useful code that allows us to plug in any values we want, we may as well generate rulers back to the beginning of time...or at least back to the beginning of recorded history.
+
+```elisp
+(setq reign/start-ancient 1)
+(setq reign/end-ancient-house 'baloch)
+(setq reign/end-ancient 421)
+
+(defun reign/generate-ancient ()
+  (reign/generate-helper reign/start-ancient reign/end-ancient-house reign/end-ancient nil))
+```
+
+And just glue all that history together.
+
+```elisp
+(append (reign/generate-ancient) (reign/generate-gap))
+```
+
+The really magical part is when you put all that code into the same block and type `C-c C-c` (Control-C, twice) on the block, which runs `org-babel-execute-src-block` and evaluates it.  At the bottom appears the result in a handy table form!  Each entry looks something like this:
+
+```org
+| (start-year . 665) | (end-year . 713) | (duration . 48) | (house . psarlay)    | (ruler-gender . f) | (consort-gender . m)          |
+```
+
+Determining names for the ruler and their consort is a very separate and more subjective process.  But we have taken a model and generated some fantasy kingdom history with it!
+
+As for publishing this information, we can get the spreadsheet features of org-mode to help us out, if we structure our table properly.  The published table on the web site looks something like this:
+
+```org
+| Years        | House   | Ruler(s)                             |
+|--------------+---------+--------------------------------------|
+| 665-713 X.Y. | Psarlay | Queen Zakia & Prince Consort Sangrez |
+```
+
+But I have start years and durations and end years in the data I just generated.  Why not ask Emacs to format things for us?  My private copy of the table looks like this:
+
+```org
+| Start | Duration | End | Years | House   | Ruler(s)                             |
+|-------+----------+-----+-------+---------+--------------------------------------|
+|   665 |       48 |     |       | Psarlay | Queen Zakia & Prince Consort Sangrez |
+#+TBLFM: $3 = if($2, $1 + $2, string(""))
+#+TBLFM: $4 = '(concat $1 "-" $3 " X.Y.")
+```
+
+Whenever I type that lovely `C-c C-c` (`org-ctrl-c-ctrl-c-hook`) on each `#+TBLFM:` line it fills in the cells that are derived information  in a consistent format.  (Probably eventually running `org-table-calc-current-TBLFM`.)  Or I can use `C-c *` (`org-ctrl-c-star` which eventually calls `org-table-recalculate`) from within the table to recompute all the formulas associated with it.  So I can then copy this table to the web site -- also written in org, because I'm lazy and the [Github Markup library](https://github.com/github/markup) that powers Github wikis supports it -- and just remove the first three columns of the table by moving my cursor to each column and invoking `M-x org-table-delete-column`.
+
+
+## Complete Source {#complete-source}
+
+Save this in a file whose name ends in `.org`. Wrap the code in `#+begin_src elisp` and `#+end_src` and evaluate.
+
+```elisp
+(setq reign/houses '(gondal zaman ashkani sial
+			  psarlay qambrani malyar
+			  jalbani baloch nazdana rodini))
+(setq reign/maybe-change-of-house (list nil nil t))
+(setq reign/ruler-genders '(m m m f f x))
+(setq reign/maybe-has-consort (list t t t nil nil))
+(setq reign/maybe-consort-gender (list nil nil nil nil nil t t t 'x))
+
+(defun reign/duration () (+ (random 36) (random 36)))
+
+(defun reign/new-house () (seq-random-elt reign/maybe-change-of-house))
+
+(defun reign/house () (seq-random-elt reign/houses))
+
+(defun reign/change-of-house (old-house)
+  (let ((new-house (reign/house)))
+    (if (eq new-house old-house)
+      (reign/change-of-house old-house)
+      new-house)))
+
+(defun reign/ruler-gender () (seq-random-elt reign/ruler-genders))
+
+(defun reign/has-consort () (seq-random-elt reign/maybe-has-consort))
+
+(defun reign/consort-gender () (seq-random-elt reign/maybe-consort-gender))
+
+(defun reign/consort-gender-lookup (ruler consort)
+  (cond ((eq consort 'x) consort)
+      ((and (eq ruler 'm) (not consort)) 'f)
+      ((and (eq ruler 'f) (not consort)) 'm)
+      (t ruler)))
+
+(defun reign/consort-gender (ruler-gender)
+  (let ((consort-gender (seq-random-elt reign/maybe-consort-gender)))
+    (reign/consort-gender-lookup ruler-gender consort-gender)))
+
+(defun reign/generate-one (current-house)
+  (let* ((duration (reign/duration))
+       (next-house (if (reign/new-house) (reign/change-of-house current-house) current-house))
+       (ruler-gender (reign/ruler-gender))
+       (has-consort (reign/has-consort))
+       (consort-gender (reign/consort-gender ruler-gender)))
+    (list
+     (cons 'duration duration)
+     (cons 'house next-house)
+     (cons 'ruler-gender ruler-gender)
+     (cons 'consort-gender (if has-consort consort-gender 'no-consort)))))
+
+(defun reign/generate-helper (start-year start-house end-year history)
+  (if (<= end-year start-year) history
+    (let* ((this-reign (reign/generate-one start-house))
+	 (house (alist-get 'house this-reign))
+	 (maybe-duration (alist-get 'duration this-reign))
+	 (duration-floor (- end-year start-year))
+	 (maybe-new-end-year (- end-year maybe-duration))
+	 (adjusted-duration (if (< maybe-new-end-year start-year) duration-floor maybe-duration))
+	 (new-end-year (if (<= maybe-new-end-year start-year) start-year maybe-new-end-year))
+	 (augmentation (list
+			(cons 'start-year new-end-year)
+			(cons 'end-year end-year)))
+	 (adjusted-duration-pair (cons 'duration adjusted-duration))
+	 (durationless-reign (assoc-delete-all 'duration this-reign))
+	 (adjusted-reign (cons adjusted-duration-pair durationless-reign))
+	 (reign-record (append augmentation adjusted-reign))
+	 (new-history (cons reign-record history)))
+      (reign/generate-helper start-year house new-end-year new-history))))
+
+(setq reign/start-gap 611)
+(setq reign/end-house 'malyar)
+(setq reign/end-gap 784)
+
+(defun reign/generate-gap ()
+  (reign/generate-helper reign/start-gap reign/end-house reign/end-gap nil))
+
+(setq reign/start-ancient 1)
+(setq reign/end-ancient-house 'baloch)
+(setq reign/end-ancient 421)
+
+(defun reign/generate-ancient ()
+  (reign/generate-helper reign/start-ancient reign/end-ancient-house reign/end-ancient nil))
+
+(append (reign/generate-ancient) (reign/generate-gap))
+```
+
+[^fn:1]: Yes, [org-roam](https://orgroam.com/) is involved, but it is not the focus of this article.
+[^fn:2]: Non-binary, transgender, and gender-non-conforming folk are welcome as players at the table and as characters in the setting as well.  Modeling both sex and gender in the code would not add much educational value from a computing perspective, but could be interesting for describing a society that more closely resembles where I live.
