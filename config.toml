@@ -1,4 +1,4 @@
-baseURL = 'http://example.org/'
+baseURL = 'https://tnalpgge.github.io/technically-nightshade'
 languageCode = 'en-us'
 title = 'Technically Nightshade'
 theme = 'relearn'
