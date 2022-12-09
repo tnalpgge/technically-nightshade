@@ -1,5 +1,7 @@
 baseURL = 'https://tnalpgge.github.io/technically-nightshade'
 languageCode = 'en-us'
 title = 'Technically Nightshade'
-theme = 'relearn'
+theme = 'black-and-light'
 ignorefiles = ['~$']
+pygmentsstyle = "bw"
+pygmentscodefences = false
