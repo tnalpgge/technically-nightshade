@@ -88,3 +88,6 @@ tags
 [._]*.un~
 
 # End of https://www.toptal.com/developers/gitignore/api/emacs,vim,hugo
+
+# Specific to this repository
+content/
