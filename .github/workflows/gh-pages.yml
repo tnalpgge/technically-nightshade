@@ -18,13 +18,13 @@ jobs:
           submodules: true  # Fetch Hugo themes (true OR recursive)
           fetch-depth: 0    # Fetch all history for .GitInfo and .Lastmod
 
-      - name: Setup emacs
+      - name: Setup Emacs
         uses: purcell/setup-emacs@master
         with:
           version: 28.2
 
-      - name: Prepare org content for hugo
-        run: emacs -q --batch export.el
+      - name: Prepare org content for Hugo
+        run: emacs -q --batch -l export.el
 
       - name: Setup Hugo
         uses: peaceiris/actions-hugo@v2
