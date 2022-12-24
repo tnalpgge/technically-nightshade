@@ -8,3 +8,4 @@ pygmentscodefences = false
 
 [params]
 sitename = "Technically Nightshade"
+dateform = "02 January 2006"
