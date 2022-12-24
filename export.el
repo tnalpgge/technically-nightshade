@@ -43,4 +43,21 @@
     (mapcar #'my/batch-ox-hugo-file
 	    (file-expand-wildcards "*.org")))))
 
-(my/batch-ox-hugo-directory default-directory)
+;; https://stackoverflow.com/questions/25823055/faster-emacs-directory-walker
+(defun my/batch-ox-hugo-directory-recursively (directory)
+  (message "Looking for org files under %s" directory)
+  (let ((files (file-name-all-completions "" (expand-file-name directory))))
+    (dolist (thing files)
+      (let ((absthing
+	     (concat directory
+		     (if (string-suffix-p "/" directory) "" "/") thing)))
+	(cond
+	 ((member thing '("./" "../"))
+	  nil)
+	 ((string-suffix-p ".org" thing)
+	  (my/batch-ox-hugo-file absthing))
+	 ((string-suffix-p "/" thing)
+	  (my/batch-ox-hugo-directory-recursively absthing))
+	 (t nil))))))
+  
+(my/batch-ox-hugo-directory-recursively (concat default-directory "org"))
