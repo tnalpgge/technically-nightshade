@@ -1,0 +1,78 @@
+#+hugo_base_dir: ../..
+* Posts
+** sdrawkcaB gnitirW                                                  :troff:
+:PROPERTIES:
+:EXPORT_DATE: 2022-12-10
+:EXPORT_FILE_NAME: sdrawkcab-gnitirw
+:END:
+I am no fan of modern office software.  I use it under protest and under duress.  It's important software to a lot of people, but it feels like dragging a steamer trunk crammed full of clothes and equipment to the corner store at the end of the block when you just want a quick snack.  So I look for alternatives in free, /libre,/ and open-source software that are compatible with revision control systems for text files; they can run quite well on older and lower-spec machines.
+
+When I was sufficiently inspired to write an entire adventure for a popular tabletop role-playing game, I started to look for a way to produce an attractive PDF document with the familiar two-column layout that so many publishers use.  I had seen troff used for manual pages, and I had access to plenty of systems that had [[https://www.gnu.org/software/groff/][GNU roff]] ("groff") installed.  (I had briefly played with [[https://www.ctan.org/tex][TeX]] and its descendant LaTeX back in my university days, and I have a lot of respect for them, but they are not for me.)  Since [[https://www.freebsd.org/][FreeBSD]] had evicted many [[https://www.gnu.org/licenses/licenses.html#GPL][GPL]]-licensed tools from their base system since the last time I did any serious =roff=-ing, I'd have to find some useful software to install.  Fortunately I stumbled upon the [[https://n-t-roff.github.io/heirloom/doctools][Heirloom Documentation Tools]] ("heirloom-doctools").  They had me at /"Plug-and-Play" font handling/ which means that a wide range of fonts was now open to me.  (I vaguely remember using custom fonts in groff was painful.)
+
+I thought that I might use a mix of my usual left-to-right text with tiny sprinkles of right-to-left Hebrew in the adventure.  This led me to briefly consider [[https://github.com/aligrudi/neatroff][neatroff]], but that would require a change in toolset that I wasn't prepared to accept.  I ultimately punted on the idea, but I was left with an interesting question.  Given that it can deal with UTF-8, *could I teach heirloom-doctools to reverse strings for me?*
+
+As with many problems involving a collection of things, there is a recursive approach and an iterative approach.  One cannot truly say one has reversed a string until one has implemented both in the same language.  Since I do virtually all of my writing in [[https://www.gnu.org/software/emacs][Emacs]] these days, and Emacs Lisp (well, any Lisp really) lends itself to recursion, I'll start with the recursive version.
+
+#+begin_src nroff
+.\"
+.\" Recursively build a reversed string
+.\"
+.de REVRCSV \" string text
+.if '\\$2'' .return
+.lds orig \\$2
+.lds tail \\*[orig]
+.substring tail -1
+.ie '\\*[tail]' ' .as \\$1 \ \" intentional space at end of line
+.el .as \\$1 \\*[tail]
+.chop orig
+.REVRCSV \\$1 "\\*[orig]"
+..
+#+end_src
+
+Contrast with the iterative version.
+
+#+begin_src nroff
+.\"
+.\" Iteratively build a reversed string
+.\"
+.de REVITER \" string text
+.ds \\$1
+.lds orig \\$2
+.length reviter \\*[orig]
+.while \\n[reviter]>0 \{\
+.lds tail \\*[orig]
+.substring tail -1
+.ie '\\*[tail]' ' .as \\$1 \ \" intentional space at end of line
+.el .as \\$1 \\*[tail]
+.chop orig
+.length reviter \\*[orig]
+\}
+..
+#+end_src
+
+The calling convention for both is to define a string to store the result and to provide the text to be reversed.  Then you can use the new string in other ways, or perhaps immediately place it in the output.
+
+#+begin_src nroff :file ffort.tr
+  .do xflag 3
+  .lc_ctype en_US.UTF-8
+  .hylang en_US
+  .mediasize letter
+  .\" insert macro definitions here
+  .REVRCSV rrr troff
+  .br
+  recursively: \*[rrr]
+  .REVITER iii troff
+  .br
+  iteratively: \*[iii]
+#+end_src
+
+Save the file as ~ffort.tr~ and compute your reversed strings!
+
+#+begin_example
+$ nroff ffort.tr  | uniq
+recursively: ffort
+iteratively: ffort
+
+#+end_example
+
+Both the recursive and versions are about the same length, which is moderately surprising.  And so far neither version has been directly useful in my writing as of yet, but I remain hopeful.  Benchmarking them, I found that 10,000 iterations of the iterative version took about 4.5 seconds on my machine, and only 1,000 iterations of the recursive version took about 16.6 seconds.  The iterative version is clearly faster.  I still think the recursive version is more fun.
