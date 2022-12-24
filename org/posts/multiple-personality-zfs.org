@@ -1,0 +1,496 @@
+#+hugo_base_dir: ../..
+* Posts
+** Multiple Personality ZFS
+:PROPERTIES:
+:EXPORT_DATE: 2022-12-24
+:EXPORT_FILE_NAME: multiple-personality-zfs
+:END:
+*** Introduction
+
+I have a computer that I use for a particular hobby.  And it runs a decent operating system for what I want to accomplish with it.  But it's not my preferred operating system.  I wonder if I can share my home directory between two operating systems that never run concurrently.  That sounds a lot better than copying files back and forth in an effort to keep things in sync.
+
+So the hobby is kind of niche.  And the people who use [[https://unix.org/][UNIX]]-like operating systems for that hobby is sub-niche.  And people who use [[https://en.wikipedia.org/wiki/Berkeley_Software_Distribution][BSD]]-based operating systems for that hobby is sub-sub-niche.  So I'm not expecting any sort of revolution to spawn out of this particular post.  In fact, this is arguably a useless exercise.  But why let that stop us from exploring?  Maybe we'll learn something useful along the way.
+
+*** Background
+
+I've built up a fair amount of data that I want to preserve on this computer.  And I want to access it from either of the operating systems on it, without copying it back and forth and letting the two halves get out of sync.  So the files they share in common would have to use the same on-disk formats.  We'll just choose a file system that both operating systems can read and write, right?  FAT32, [[https://en.wikipedia.org/wiki/Bob%27s_your_uncle][Bob's your uncle]].
+
+So there's a problem with that idea.  Consider that the tiny matter of syncing a couple of terabytes worth of data to an external SSD formatted with that filesystem took *days.*  When I reformatted it to something more reasonable, it only took *hours.*  And that's to say absolutely nothing about data integrity or any of that other stuff.
+
+Last I checked, the various BSDs and Linuxes didn't really support each other's native file systems very well.  I hear there are facilities like [[https://en.wikipedia.org/wiki/Filesystem_in_Userspace][FUSE]] which can bridge the gap, but I'm really looking for something that feels natively supported in both worlds.
+
+[[][ZFS]] is an awesome way to manage computer storage.  It has too many features for me to describe here, but the killer features for me are:
+- less wasted disk space
+- snapshots
+  
+[[https://www.freebsd.org/][FreeBSD]] has been [[https://docs.freebsd.org/en/books/handbook/zfs/][happily using ZFS]] for quite a while now, and they have adopted the [[https://openzfs.org/][OpenZFS]] project's implementation of ZFS.  OpenZFS also works well on [[https://ubuntu.com/][Ubuntu]] and other distributions of Linux.
+
+Well, isn't that interesting!  My hobby PC is primarily running Ubuntu, but I'd rather be running FreeBSD for as much of it as I can.  (There may be some applications that are just too gnarly to work equally well on both; I'm willing to put up with that.)  Maybe we don't have to copy files back and forth after all.  And I do have the ability to create virtual machines pretty easily...
+
+*** The Test Bed
+
+Since we don't want to trash our hobby PC, we'll create a virtual machine instead and trash it instead.  In terms of its virtual hardware, we'll give it:
+
+- 8 GB of memory
+- 2 virtual CPUs
+- an ethernet interface
+- a 40 GB SCSI hard drive for operating systems
+- a 20 GB SCSI hard drive for the shared data
+- no sound card
+- no camera
+- UEFI firmware
+
+*** What would FreeBSD do?
+
+We'll start by installing FreeBSD 13.1-RELEASE in the standard way from the usual downloadable ISO image, telling it to use the entirety of the first disk as a ZFS ZPOOL.  Then we'll see what the resulting GPT partition table looks like.
+
+FreeBSD calls the first SCSI disk ~da0~, and the various GPT partitions within it ~da0p1~, ~da0p2~, etc.
+
+#+begin_example
+# gpart show da0
+=>       40  83886000  da0  GPT (40G)
+         40    532480    1  efi  (260M)
+     532520      1024    2  freebsd-boot  (512K)
+     533544       984       - free -  (492K)
+     534528    494304    3  freebsd-swap  (2.0G)
+    4728832  71955200    4  freebsd-zfs  (38G)
+   83884032      2008       - free -  (1.0M)
+
+# cat /etc/fstab
+# Device Mountpoint FStype Options Dump Pass#
+/dev/da0p1 /boot/efi msdosfs rw 2 2
+/dev/da0p3 none swap sw 0 0
+#+end_example
+
+ZFS does not need the traditional ~/etc/fstab~ method to get everything mounted.
+
+*** What would Ubuntu do?
+
+Let's repeat the exercise with Ubuntu 22.04 LTS, using their server install media.  Linux calls the first SCSI disk =sda=, with the partitions within it being =sda1=, =sda2=, etc.
+
+#+begin_example
+# fdisk -l /dev/sda
+# ...
+Disklabel type: gpt
+# ...
+Device       Start      End  Sectors  Size Type
+/dev/sda1     2048  2203647  2201600    1G EFI System
+/dev/sda2  2203648  6397951  4194304    2G Linux filesystem
+/dev/sda3  6397952 83884031 77486080 36.9G Linux filesystem
+#+end_example
+
+*** Adding ZFS
+
+I assumed that creating a new ZPOOL under Ubuntu would be more likely to produce compatible results.  So away we go!  Running with superuser permissions, either via ~sudo~ or from a proper root shell, we'll dedicate that entire second SCSI disk (=sdb= in Linux-speak) to it.
+
+#+begin_src sh
+  apt install zfsutils-linux
+  zpool create zdata /dev/sdb
+#+end_src
+
+Now how does the partition table on =sdb= look?
+
+#+begin_example
+# fdisk -l /dev/sdb
+# ...
+Disklabel type: gpt
+# ...
+Device        Start      End  Sectors Size Type
+/dev/sdb1      2048 41924607 41922560  20G Solaris /usr & Apple ZFS
+/dev/sdb9  41924608 41940991    16384   8M Solaris reserved 1
+#+end_example
+
+Wasn't that considerate!  It built a GPT partition table for us.
+
+One of the neat things about ZPOOLs is that you can mount them on any system than understands them and you should be able to pick up where you left off.  This is called /importing/ a ZPOOL.  Which implies that it must be /exported,/ even if you don't move physical disks around.  So before we shut down, we'll export =zdata= to see if we can import it.
+
+#+begin_src
+  zpool export zdata
+#+end_src
+
+Note that if we had any mounted file systems (datasets) from =zdata=, ~zpool export~ would unmount them immediately before export.  So we'll remember that as something we'd like to perform automatically upon every shutdown.
+
+*** But can we really share it?
+
+I booted from the FreeBSD install media and intentionally chose the most difficult partitioning option so as not to disturb the Ubuntu install.  (It was a lot of typing, based on research I had done a while ago into automated customized FreeBSD installs, and you'll see some of the results at the end of this post.)  I had arrived at this GPT partition table:
+
+#+begin_example
+# gpart show da0
+=>      34  83886013  da0  GPT  (40G)
+        34      1024    4 freebsd-boot  (512K)
+      1058       990      - free -  (495K)
+      2048   2201600    1 efi  (1.0G)
+   2203648   4194304    2 linux-data  (2.0G)
+   6397952  37748736    3 linux-data  (18G)
+  44146688   4194304    5 freebsd-swap  (2.0G)
+  48340992  35543040    6 freebsd-zfs  (17G)
+  83884032      2015      - free -  (1.0M)
+#+end_example
+
+So I had assumed at this point that I was doing quite well.  It wasn't a terrible assumption, but it wasn't that great either.  Why?  Because I hadn't yet wrestled with the elephant in the room: easily booting one computer into either operating system without relying upon install media.
+
+*** Things are so much easier with cloud servers
+
+For my day job I spend a lot of time working on cloud-based servers that have only one operating system installed.  So there's a whole world of problems I don't get to deal with on a regular basis.  Oh well, no time like the present to dust off some troubleshooting skills...
+
+I thought that Ubuntu would be nice enough to give me the [[https://www.gnu.org/software/grub/][GRUB]] boot loader screen.  But it didn't.  What am I thinking at this point?  Installing more than one operating system on a server's disk is often silly, because you usually want it to reboot quickly, in a completely unattended fashion.
+
+So I redid the Ubuntu install with desktop instead of server.  One of the side effects of this decision was that I couldn't easily use Linux LVM for the main operating system partition, so I chose journaling *XFS* instead.  Another side effect was that the EFI partition used the *ext4* filesystem whether I liked it or not.  (I didn't, because that would mean I couldn't easily read/write it from FreeBSD.)  But I went through with the reinstall anyway because those were relatively minor details anyway.
+
+But I got the same problem.  I still didn't see a GRUB menu.  It always booted straight into Ubuntu.
+
+Eventually I found [[https://askubuntu.com/questions/16042/how-to-get-to-the-grub-menu-at-boot-time][How to get the GRUB menu at boot-time?]] which directed me to change two lines near the top of =/etc/default/grub=:
+
+#+begin_src sh
+  #GRUB_TIMEOUT_STYLE=hidden
+  GRUB_TIMEOUT=30
+#+end_src
+
+So now I could reboot back into Ubuntu and get the menu.  And that meant I could quite likely craft a menu entry that would help me boot FreeBSD.
+
+You know, I didn't embark on this path just so I could wrestle with boot loaders all the time.  Oh well, we'll get this out of the way.  Good thing we set up a throwaway virtual machine for this, otherwise we'd be in some real trouble!
+
+This is where having built the EFI partition came in handy.  After banging about a bit more, and consulting these pages in particular:
+
+- [[https://forums.freebsd.org/threads/booting-freebsd-via-grub.60422/][Booting FreeBSD via GRUB]]
+- [[https://unix.stackexchange.com/questions/569259/how-to-boot-freebsd-from-gnu-grub-2-bootloader-command-mode][How to boot FreeBSD from GNU GRUB 2 bootloader command mode]]
+
+I arrived at this menu entry that I appended to =/etc/grub.d/40_custom= on Ubuntu:
+
+#+begin_src sh
+  menuentry "FreeBSD EFI" {
+      set root='(hd0,gpt1)'
+      chainloader /EFI/FreeBSD/loader.efi
+  }  
+#+end_src
+
+Since Ubuntu desktop is nice enough to mount =/boot/efi= already, and auto-mount any CD you put in the drive, it was very easy to copy the necessary EFI-related files from FreeBSD media:
+
+#+begin_src sh
+  mkdir -p /boot/efi/EFI/FreeBSD
+  cp -p /media/*/*/boot/*.efi /boot/efi/EFI/FreeBSD
+  eject
+  update-grub
+#+end_src
+
+Rebooted from FreeBSD media and reinstalled yet again, partitioning in the shell yet again.  This time I ended up with:
+
+#+begin_example
+# gpart show da0
+=>      34  83886013  da0  GPT  (40G)
+        34      2014       - free -  (1.0 M)
+      2048   1998848    1  efi  (1.0G)
+   2000896   3999744  	2  linux-data  (1.9G)
+   6000640  34000896  	3  linux-data  (16G)
+  40001536   3999744  	4  linux-swap  (1.9G)
+  44001280  39884767  	5  freebsd-zfs  (19G)
+
+#+end_example
+
+Which turns out to be the winning combination as far ask partitions go.  After a few more laps with the now-visible GRUB menu and command line, I refined the particular menu entry for FreeBSD so that it worked consistently.  (I'll share it at the end.)
+
+*** Now back to the important stuff
+
+So we need to export our chosen ZPOOL every time we shut down Ubuntu.  As much as I prefer the FreeBSD system of initialization scripts, and regard [[https://systemd.io/][systemd]] with a degree of suspicion, I would have to deal with that framework.  A few more web searches yielded these useful links:
+
+- [[https://askubuntu.com/questions/1212053/zfs-pools-not-automatically-exported-on-reboot][ZFS Pools not automatically exported on reboot]]
+- [[https://www.psdn.io/posts/systemd-shutdown-unit/][systemd Shutdown Units]]
+
+Which I boiled down to this *systemd* service, stored in ~/etc/systemd/system/zpool-export.service~
+
+#+begin_src conf :file /etc/systemd/system/zpool-export.service
+  [Unit]
+  Description=ZFS Pool Export
+  Before=zfs.target	
+
+  [Service]
+  Type=oneshot
+  RemainAfterExit=yes	  
+  ExecStart=/bin/true
+  ExecStop=/usr/sbin/zpool export -a -f
+
+  [Install]
+  WantedBy=zfs.target
+#+end_src
+
+It's a blunt instrument, but it gets the job done.
+
+#+begin_src sh
+  systemctl daemon-reload
+  systemctl enable zpool-export.service
+  systemctl start zpool-export.service
+#+end_src
+
+Now I can reboot back into Ubuntu as many times as I want in a row and the datasets in the =zdata= ZPOOL mount automatically.  But that's not really an accomplishment, is it?  We have to address what FreeBSD thinks.
+
+Examining the various *systemd* units that came with the =zfsutils-linux= package, I saw that they were taking a two-step approach:
+
+1. importing the ZPOOLs /without/ mounting the datasets as file systems
+1. mount all the ZFS datasets as file systems
+
+So we would adopt the same strategy, but shoehorn it into scripts that would work well with FreeBSD's initialization system -- specifically with the library ~/etc/rc.subr~ that can make writing these scripts easier.
+
+First, a script which import the ZPOOLs from certain devices but does not mount them when its service "starts."  And exports those same ZPOOLs when the service "stops."  This would be installed as =/usr/local/etc/rc.d/zpool-shared=.
+
+Then, a script that "starts" it service by mounting the ZFS datasets from those ZPOOLs as file systems, optionally sharing them if the right properties were set.  And do the opposite when the service "stops."  This would be installed as =/usr/local/etc/rc.d/zfs-shared=.
+
+Add in a few key words so that FreeBSD can properly order the scripts and we should have it!  Let's set the key variables that trigger the desired behaviors from FreeBSD's initialization system.
+
+#+begin_src sh
+  sysrc zpool_shared_enable=YES zpool_shared_devices=/dev/da1p1 zpool_shared_pools=zdata
+  sysrc zfs_shared_enable=YES zfs_shared_datasets=zdata
+#+end_src
+
+~zpool_shared_enable~ and ~zfs_shared_enable~ should be self-explanatory.
+
+~zpool_shared_devices~ specifies what devices to search on for ZPOOLs.  ~zpool_shared_pools~ gives the names of the pools we expect to find.  ~zfs_shared_datasets~ lists the common prefixes of dataset names (usually the names of the ZPOOLs that contain them) that we will consider interesting for this purpose.  Note this does not include the main FreeBSD ZPOOL which is traditionally named =zroot=.
+
+I booted back and forth between Ubuntu and FreeBSD, using the appropriate GRUB menu entries, and saw that the =zdata= pool and its datasets were mounted every time, on both operating systems.
+
+*** Future refinements
+
+If I were to repeat this I don't know that I would go through the desktop installer for Ubuntu -- or at least I would get familiar enough with it that I could do the disk partitioning exactly the way I would want:
+
+| Linux name     | Linux mount | FreeBSD name | FreeBSD mount | Size  | Format      | Purpose                |
+|----------------+-------------+--------------+---------------+-------+-------------+------------------------|
+| sda1           | ~/boot/efi~ | da0p1        | ~/boot/efi~   | 1 GB  | fat32       | EFI                    |
+| sda2           | ~/boot~     | da0p2        |               | 2 GB  | ext4        | Linux boot             |
+| sda3           |             | da0p3        |               | 18 GB | linux-lvm   | Linux LVM partition    |
+| sda3 vg0       |             |              |               |       |             | Linux LVM volume group |
+| sda3 vg0-lv--0 | ~/~         |              |               |       | ext4        | Linux OS               |
+| sda4           | swap        | da0p4        | swap          | 2 GB  | who cares?  | Swap space             |
+| sda5           |             | da0p5        | ~/~           | 17 GB | freebsd-zfs | FreeBSD OS             |
+| sdb1           | ~/zhome~    | da1p1        | ~/zhome~      | 20 GB | apple-zfs   | Shared ZPOOL =zdata=   |
+| sdb9           |             | da1p9        |               | 8 MB  | reserved    | reserved               |
+
+*** Final products
+
+**** Ubuntu
+
+***** ~/etc/systemd/system/zpool-export.service~
+
+#+begin_src conf :file /etc/systemd/system/zpool-export.service
+  [Unit]
+  Description=ZFS Pool Export
+  Before=zfs.target	
+
+  [Service]
+  Type=oneshot
+  RemainAfterExit=yes	  
+  ExecStart=/bin/true
+  ExecStop=/usr/sbin/zpool export -a -f
+
+  [Install]
+  WantedBy=zfs.target
+#+end_src
+
+***** ~/etc/grub.d/40_custom~
+
+#+begin_src sh
+  # XXX TBD
+#+end_src
+
+***** Manual post-install tweaks
+
+This script assumes you have the previously-mentioned files in place already.
+
+#+begin_src sh
+  sed -i -e '/GRUB_TIMEOUT_STYLE/s/^/#/' -e '/GRUB_TIMEOUT=/s/=.*/=30/' /etc/default/grub
+  update-grub
+  apt install zfsutils-linux
+  zpool create zdata /dev/sdb
+  zpool export -a
+  zpool import -a -o cachefile=/etc/zfs/zpool.cache
+  zpool export -a
+  systemctl daemon-reload
+  systemctl enable zpool-export.service
+  systemctl start zpool-export.service
+  # Insert FreeBSD install media in CD-ROM drive
+  mkdir -p /boot/efi/EFI/FreeBSD
+  cp -p /media/*/*/boot/*.efi /boot/efi/EFI/FreeBSD
+  eject
+#+end_src
+
+**** FreeBSD
+
+***** Manual partitioning and mounting from installer
+
+#+begin_src sh
+  gpart add -t freebsd-zfs -l freebsd-zfs da0
+  zpool create -o altroot=/mnt -m none -f zroot /dev/da0p5
+  zfs create -o mountpoint=none zroot/ROOT
+  zfs create -o mountpoint=/ zroot/ROOT/default
+  zfs create -o mountpoint=/tmp -o exec=on -o setuid=off zroot/tmp
+  zfs create -o moutpoint=/usr -o canmount=off zroot/usr
+  zfs create zroot/usr/home
+  zfs create -o setuid=off zroot/usr/ports
+  zfs create zroot/usr/src
+  zfs create -o mountpoint=/var -o canmount=off zroot/var
+  zfs create -o exec=off -o setuid=off zroot/var/audit
+  zfs create -o exec=off -o setuid=off zroot/var/crash
+  zfs create -o exec=off -o setuid=off zroot/var/log
+  zfs create -o atime=on zroot/var/mail
+  zfs create -o setuid=off zroot/var/tmp
+  zfs set mountpoint=/zroot zroot
+  chmod 1777 /mnt/tmp /mnt/var/tmp
+  zpool set bootfs=zroot/ROOT/default zroot
+  mkdir -p /mnt/boot/zfs
+  zpool set cachefile=/mnt/boot/zfs/zpool.cache zroot
+  zfs set canmount=noauto zroot/ROOT/default
+  echo 'zfs_enable="YES"' >> /tmp/bsdinstall_etc/rc.conf.zfs
+  echo 'kern.geom.label.disk_ident.label="0"' >> /tmp/bsdinstall_boot/loader.conf.zfs
+  echo 'kern.geom.label.gptid.enable="0"' >> /tmp/bsdinstall_boot/loader.conf.zfs
+  cat >>/tmp/bsdinstall_etc/fstab <<EOF
+  /dev/da0p4	none	swap	sw	0	0
+  EOF
+  exit  
+#+end_src
+
+***** ~/usr/local/etc/rc.d/zpool-shared~
+
+#+begin_src sh :file /usr/local/etc/rc.d/zpool-shared
+  #!/bin/sh
+
+  . /etc/rc.subr
+
+  # PROVIDE: zpool_shared
+  # REQUIRE: zpool
+  # BEFORE: zfs_shared
+
+  name="zpool_shared"
+  desc="Import shared ZPOOLs"
+  rcvar="zpool_shared_enable"
+  start_cmd="zpool_shared_start"
+  stop_cmd="zpool_shared_stop"
+  required_modules="zfs"
+  : ${zpool_shared_devices=""}
+  : ${zpool_shared_pools=""}
+
+  zpool_shared_start() {
+      local device
+      for device in ${zpool_shared_devices}
+      do
+	  echo Importing ZPOOLs on device ${device}.
+	  zpool import -a -N -d ${device}
+      done
+  }
+
+  zpool_shared_stop() {
+      local pool
+      for pool in ${zpool_shared_pools}
+      do
+	  echo Exporting shared ZPOOL ${pool}.
+	  zpool export ${pool}
+      done
+  }
+
+  load_rc_config $name
+  run_rc_command "$1"
+#+end_src
+
+***** ~/usr/local/etc/rc.d/zfs-shared~
+
+#+begin_src sh :file /usr/local/etc/rc.d/zfs-shared
+  #!/bin/sh
+
+  . /etc/rc.subr
+
+  # PROVIDE: zfs_shared
+  # REQUIRE: zpool_shared
+
+  name="zfs_shared"
+  desc="Mount and share etc ZFS datasets"
+  rcvar="zfs_shared_enable"
+  start_cmd="zfs_shared_start"
+  stop_cmd="zfs_shared_stop"
+  poststart_cmd=""
+  required_modules="zfs"
+  : ${zfs_shared_datasets=""}
+
+  zfs_shared_member() {
+      local name
+      local dataset
+      for dataset in ${zfs_shared_datasets}
+      do
+	  case x${name} in
+	      x${dataset}*)
+		  return 0
+		  ;;
+	      esac
+      done
+      return 1
+  }
+
+  zfs_shared_analyze() {
+      local dataset=${1}
+      can_mount=false
+      can_share=false
+      has_mountpoint=false
+      set $(zfs get -H -o value canmount,mountpoint,sharenfs,sharesmb ${dataset})
+      [ x${1} = xon ] && can_mount=true
+      [ x${2} != none ] && has_mountpoint=true
+      [ x${3} = xon ] || [ x${4} = xon ] && can_share=true
+  }
+
+  zfs_shared_maybe_mount() {
+      local dataset=${1}
+      if ${can_mount} && ${has_mountpoint}
+      then
+	  echo Mounting ZFS dataset ${dataset}.
+	  zfs mount ${dataset}
+	  if ${can_share}
+	  then
+	      echo Sharing ZFS dataset ${dataset}.
+	      zfs share ${dataset}
+	  fi
+      fi
+  }
+
+  zfs_shared_start() {
+      local dataset
+      for dataset in $(zfs list -H -o name | sort)
+      do
+	  if zfs_shared_member ${dataset}
+	  then
+	      zfs_shared_analyze ${dataset}
+	      zfs_shared_maybe_mount ${dataset}
+	  fi
+      done
+  }
+
+  zfs_shared_maybe_unmount() {
+      local dataset=${1}
+      if ${can_mount} && ${has_mountpoint}
+      then
+	  if ${can_share}
+	  then
+	      echo Unsharing ZFS dataset ${dataset}.
+	      zfs unshare ${dataset}
+	  fi
+	  echo Unmounting ZFS dataset ${dataset}.
+	  zfs unmount ${dataset}	  
+      fi
+  }
+
+  zfs_shared_stop() {
+      local dataset
+      for dataset in $(zfs list -H -o name | sort -r)
+      do
+	  if zfs_shared_member ${dataset}
+	  then
+	      zfs_shared_analyze ${dataset}
+	      zfs_shared_maybe_unmount ${dataset}
+	  fi
+      done
+  }
+
+  load_rc_config $name
+  run_rc_command "$1"
+#+end_src
+
+***** Manual post-install tweaks
+
+#+begin_src sh
+  sysrc zpool_shared_enable=YES zpool_shared_devices=/dev/da1p1 zpool_shared_pools=zdata
+  sysrc zfs_shared_enable=YES zfs_shared_datasets=zdata
+#+end_src
