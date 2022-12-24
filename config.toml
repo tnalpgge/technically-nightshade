@@ -5,3 +5,6 @@ theme = 'black-and-light'
 ignorefiles = ['~$']
 pygmentsstyle = "bw"
 pygmentscodefences = false
+
+[params]
+sitename = "Technically Nightshade"
