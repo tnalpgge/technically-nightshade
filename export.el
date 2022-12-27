@@ -59,5 +59,8 @@
 	 ((string-suffix-p "/" thing)
 	  (my/batch-ox-hugo-directory-recursively absthing))
 	 (t nil))))))
-  
+
+(let ((static (concat default-directory "/static")))
+  (if (not (file-exists-p static)) (make-directory static)))
+
 (my/batch-ox-hugo-directory-recursively (concat default-directory "org"))
