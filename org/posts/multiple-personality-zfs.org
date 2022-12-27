@@ -322,17 +322,14 @@ The timing problem was spent by reading the following manual pages:
 
 In particular, proper use of =Requires=, =After=, and =WantedBy= got me the ordering I was looking for, which is summarized here:
 
-| Unit file              | Section | Ordering constraint             |
-|------------------------+---------+---------------------------------|
-| =zpool-shared.service= |         | ~Requires=zfs.target~           |
-| =zpool-shared.service= |         | ~After=zfs.target~              |
-| =zpool-shared.target=  |         | ~Requires=zpool-shared.service~ |
-| =zfs-shared.service=   |         | ~Requires=zpool-shared.target~  |
-| =zfs-shared.service=   |         | ~After=zpool-shared.target~     |
-| =zfs-shared.service=   |         | ~WantedBy=multi-user.target~    |
-:PROPERTIES:
-:XXX_doublecheck: basically this entire table
-:END:
+| Unit file              | Section   | Ordering constraint             |
+|------------------------+-----------+---------------------------------|
+| =zpool-shared.service= | =Unit=    | ~Requires=zfs.target~           |
+| =zpool-shared.service= | =Unit=    | ~After=zfs.target~              |
+| =zpool-shared.target=  | =Install= | ~Requires=zpool-shared.service~ |
+| =zfs-shared.service=   | =Unit=    | ~Requires=zpool-shared.target~  |
+| =zfs-shared.service=   | =Unit=    | ~After=zpool-shared.target~     |
+| =zfs-shared.service=   | =Install= | ~WantedBy=multi-user.target~    |
 
 # But does it reproduce?  All this work is worth approximately /bupkis/ if nobody can reproduce it.[fn:3]  We'll try to answer that in the [[file:../mpzfs-3-no-special-snowflakes][conclusion of the series]].
 # But does it reproduce?  All this work is worth approximately /bupkis/ if nobody can reproduce it.[fn:3]  We'll try to answer that in the conclusion of the series.
@@ -405,9 +402,6 @@ sdb           8:16   0   20G  0 disk
 `-sdb9        8:25   0    8M  0 part
 sr0           11:0   1 1024M  0 rom
 #+end_example
-:PROPERTIES:
-:XXX_doublecheck: MOUNTPOINT for sda3
-:END:
 
 This looks like a reasonable arrangement of block storage devices.  What can it tell us about the partition table?
 
@@ -520,11 +514,8 @@ After the install, the system rebooted immediately into FreeBSD.  Which was not 
 Messing with the partition table didn't help.  It was booting off the correct partition already, the EFI file system.  The FreeBSD installer had noticed that =/boot/efi= was writeable, so it dropped its own EFI boot loader into the key position of =EFI/boot/bootx64.efi=.  How did I discover this?  Mostly by comparing file lengths of the files within that partition:
 
 #+begin_src sh
-  find /boot/efi -type f -iname '*.efi' -ls
+  find /boot/efi -type f -iname '*.efi' -ls | sort -k7 -n
 #+end_src
-:PROPERTIES:
-:XXX_doublecheck: casing and sorting
-:END:
 
 To remind myself how to fix the situation, I referred to the previous experiment with Ubuntu and examined its =/boot/efi= file system, before settling on the following procedure:
 
@@ -551,234 +542,3 @@ Reward yourself with a festive beverage for reading this far!  If you want to se
 *** Footnotes
 
 [fn:4] You may translate the redacted word as "stupidly" if you wish.
-
-**** Ubuntu
-
-***** ~/etc/systemd/system/zpool-export.service~
-
-#+begin_src conf :file /etc/systemd/system/zpool-export.service
-  [Unit]
-  Description=ZFS Pool Export
-  Before=zfs.target	
-
-  [Service]
-  Type=oneshot
-  RemainAfterExit=yes	  
-  ExecStart=/bin/true
-  ExecStop=/usr/sbin/zpool export -a -f
-
-  [Install]
-  WantedBy=zfs.target
-#+end_src
-
-***** ~/etc/grub.d/40_custom~
-
-#+begin_src sh
-  # XXX TBD
-#+end_src
-
-***** Manual post-install tweaks
-
-This script assumes you have the previously-mentioned files in place already.
-
-#+begin_src sh
-  sed -i -e '/GRUB_TIMEOUT_STYLE/s/^/#/' -e '/GRUB_TIMEOUT=/s/=.*/=30/' /etc/default/grub
-  update-grub
-  apt install zfsutils-linux
-  zpool create zdata /dev/sdb
-  zpool export -a
-  zpool import -a -o cachefile=/etc/zfs/zpool.cache
-  zpool export -a
-  systemctl daemon-reload
-  systemctl enable zpool-export.service
-  systemctl start zpool-export.service
-  # Insert FreeBSD install media in CD-ROM drive
-  mkdir -p /boot/efi/EFI/FreeBSD
-  cp -p /media/*/*/boot/*.efi /boot/efi/EFI/FreeBSD
-  eject
-#+end_src
-
-**** FreeBSD
-
-***** Manual partitioning and mounting from installer
-
-#+begin_src sh
-  gpart add -t freebsd-zfs -l freebsd-zfs da0
-  zpool create -o altroot=/mnt -m none -f zroot /dev/da0p5
-  zfs create -o mountpoint=none zroot/ROOT
-  zfs create -o mountpoint=/ zroot/ROOT/default
-  zfs create -o mountpoint=/tmp -o exec=on -o setuid=off zroot/tmp
-  zfs create -o moutpoint=/usr -o canmount=off zroot/usr
-  zfs create zroot/usr/home
-  zfs create -o setuid=off zroot/usr/ports
-  zfs create zroot/usr/src
-  zfs create -o mountpoint=/var -o canmount=off zroot/var
-  zfs create -o exec=off -o setuid=off zroot/var/audit
-  zfs create -o exec=off -o setuid=off zroot/var/crash
-  zfs create -o exec=off -o setuid=off zroot/var/log
-  zfs create -o atime=on zroot/var/mail
-  zfs create -o setuid=off zroot/var/tmp
-  zfs set mountpoint=/zroot zroot
-  chmod 1777 /mnt/tmp /mnt/var/tmp
-  zpool set bootfs=zroot/ROOT/default zroot
-  mkdir -p /mnt/boot/zfs
-  zpool set cachefile=/mnt/boot/zfs/zpool.cache zroot
-  zfs set canmount=noauto zroot/ROOT/default
-  echo 'zfs_enable="YES"' >> /tmp/bsdinstall_etc/rc.conf.zfs
-  echo 'kern.geom.label.disk_ident.label="0"' >> /tmp/bsdinstall_boot/loader.conf.zfs
-  echo 'kern.geom.label.gptid.enable="0"' >> /tmp/bsdinstall_boot/loader.conf.zfs
-  cat >>/tmp/bsdinstall_etc/fstab <<EOF
-  /dev/da0p4	none	swap	sw	0	0
-  EOF
-  exit  
-#+end_src
-
-***** ~/usr/local/etc/rc.d/zpool-shared~
-
-#+begin_src sh :file /usr/local/etc/rc.d/zpool-shared
-  #!/bin/sh
-
-  . /etc/rc.subr
-
-  # PROVIDE: zpool_shared
-  # REQUIRE: zpool
-  # BEFORE: zfs_shared
-
-  name="zpool_shared"
-  desc="Import shared ZPOOLs"
-  rcvar="zpool_shared_enable"
-  start_cmd="zpool_shared_start"
-  stop_cmd="zpool_shared_stop"
-  required_modules="zfs"
-  : ${zpool_shared_devices=""}
-  : ${zpool_shared_pools=""}
-
-  zpool_shared_start() {
-      local device
-      for device in ${zpool_shared_devices}
-      do
-	  echo Importing ZPOOLs on device ${device}.
-	  zpool import -a -N -d ${device}
-      done
-  }
-
-  zpool_shared_stop() {
-      local pool
-      for pool in ${zpool_shared_pools}
-      do
-	  echo Exporting shared ZPOOL ${pool}.
-	  zpool export ${pool}
-      done
-  }
-
-  load_rc_config $name
-  run_rc_command "$1"
-#+end_src
-
-***** ~/usr/local/etc/rc.d/zfs-shared~
-
-#+begin_src sh :file /usr/local/etc/rc.d/zfs-shared
-  #!/bin/sh
-
-  . /etc/rc.subr
-
-  # PROVIDE: zfs_shared
-  # REQUIRE: zpool_shared
-
-  name="zfs_shared"
-  desc="Mount and share etc ZFS datasets"
-  rcvar="zfs_shared_enable"
-  start_cmd="zfs_shared_start"
-  stop_cmd="zfs_shared_stop"
-  poststart_cmd=""
-  required_modules="zfs"
-  : ${zfs_shared_datasets=""}
-
-  zfs_shared_member() {
-      local name
-      local dataset
-      for dataset in ${zfs_shared_datasets}
-      do
-	  case x${name} in
-	      x${dataset}*)
-		  return 0
-		  ;;
-	      esac
-      done
-      return 1
-  }
-
-  zfs_shared_analyze() {
-      local dataset=${1}
-      can_mount=false
-      can_share=false
-      has_mountpoint=false
-      set $(zfs get -H -o value canmount,mountpoint,sharenfs,sharesmb ${dataset})
-      [ x${1} = xon ] && can_mount=true
-      [ x${2} != none ] && has_mountpoint=true
-      [ x${3} = xon ] || [ x${4} = xon ] && can_share=true
-  }
-
-  zfs_shared_maybe_mount() {
-      local dataset=${1}
-      if ${can_mount} && ${has_mountpoint}
-      then
-	  echo Mounting ZFS dataset ${dataset}.
-	  zfs mount ${dataset}
-	  if ${can_share}
-	  then
-	      echo Sharing ZFS dataset ${dataset}.
-	      zfs share ${dataset}
-	  fi
-      fi
-  }
-
-  zfs_shared_start() {
-      local dataset
-      for dataset in $(zfs list -H -o name | sort)
-      do
-	  if zfs_shared_member ${dataset}
-	  then
-	      zfs_shared_analyze ${dataset}
-	      zfs_shared_maybe_mount ${dataset}
-	  fi
-      done
-  }
-
-  zfs_shared_maybe_unmount() {
-      local dataset=${1}
-      if ${can_mount} && ${has_mountpoint}
-      then
-	  if ${can_share}
-	  then
-	      echo Unsharing ZFS dataset ${dataset}.
-	      zfs unshare ${dataset}
-	  fi
-	  echo Unmounting ZFS dataset ${dataset}.
-	  zfs unmount ${dataset}	  
-      fi
-  }
-
-  zfs_shared_stop() {
-      local dataset
-      for dataset in $(zfs list -H -o name | sort -r)
-      do
-	  if zfs_shared_member ${dataset}
-	  then
-	      zfs_shared_analyze ${dataset}
-	      zfs_shared_maybe_unmount ${dataset}
-	  fi
-      done
-  }
-
-  load_rc_config $name
-  run_rc_command "$1"
-#+end_src
-
-***** Manual post-install tweaks
-
-#+begin_src sh
-  sysrc zpool_shared_enable=YES zpool_shared_devices=/dev/da1p1 zpool_shared_pools=zdata
-  sysrc zfs_shared_enable=YES zfs_shared_datasets=zdata
-#+end_src
-
