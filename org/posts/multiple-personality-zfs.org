@@ -343,11 +343,14 @@ In particular, proper use of =Requires=, =After=, and =WantedBy= got me the orde
 
 *** Footnotes
 
-[fn:2] ~find /lib/systemd/system -type f -name 'zfs*'~
-:PROPERTIES:
-:XXX_doublecheck: path to systemd unit files
-:XXX_style: surround with narration
-:END:
+[fn:2] You can discover the particular set of files via either of the following:
+#+begin_src sh
+  find /lib/systemd/system -type f -name 'zfs*'
+#+end_src
+#+begin_src sh
+  dpkg-query -L zfsutils-linux | grep ^/lib/systemd/system/
+#+end_src
+
 
 [fn:3] This colorful Yiddish word may have originally meant beans but evolved to describe the excrement of certain ungulates.  In modern usage, one of its synonyms is [[https://www.urbandictionary.com/define.php?term=the%20square%20root%20of%20bugger%20all]["the square root of bugger all."]]  Ungulate excrement is generally regarded as not immediately and directly useful for computing, though there may be extremely indirect applications that remain to be researched.
 
