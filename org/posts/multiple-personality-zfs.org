@@ -1,9 +1,9 @@
 #+hugo_base_dir: ../..
 * Posts
-** Multiple Personality ZFS Part 0: Premise and Research
+** Multiple Personality ZFS Part 0: A Questionable Idea
 :PROPERTIES:
 :EXPORT_DATE: 2022-12-26
-:EXPORT_FILE_NAME: mpzfs-0-premise-and-research
+:EXPORT_FILE_NAME: mpzfs-0-questionable-idea
 :END:
 *** Introduction
 
@@ -12,10 +12,10 @@ I have a computer that I use for a particular hobby.  And it runs a decent opera
 So the hobby is kind of niche.  And the people who use [[https://unix.org/][UNIX]]-like operating systems for that hobby is sub-niche.  And people who use [[https://en.wikipedia.org/wiki/Berkeley_Software_Distribution][BSD]]-based operating systems for that hobby is sub-sub-niche.  So I'm not expecting any sort of revolution to spawn out of this.  In fact, this is arguably a useless exercise.  But why let that stop us from exploring?  Maybe we'll learn something useful along the way.
 
 I have spread story of this journey across a series of posts:
-- *[[file:mpzfs-0-premise-research][Part 0: Premise and Research]]* \Leftarrow you are here
-- [[file:mpzfs-1-switching-personalities][Part 1: Switching Personalities]]
-- [[file:mpzfs-2-export-import-business][Part 2: The Export/Import Business]]
-- [[file:mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]
+- *[[file:../mpzfs-0-questionable-idea][Part 0: A Questionable Idea]]* \Leftarrow you are here
+- [[file:../mpzfs-1-switching-personalities][Part 1: Switching Personalities]]
+- [[file:../mpzfs-2-export-import-business][Part 2: The Export/Import Business]]
+- [[file:../mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]
 
 *** Background
 
@@ -141,7 +141,7 @@ I had arrived at this GPT:
 
 So I had assumed at this point that I was doing quite well.  It wasn't a terrible assumption, but it wasn't that great either.  Why?  Because I hadn't yet wrestled with the elephant in the room: easily booting one computer into either operating system without relying upon install media.
 
-We'll start that wrestling match in the [[file:mpzfs-1-switching-personalities][next post in the series]].
+We'll start that wrestling match in the [[file:../mpzfs-1-switching-personalities][next post in the series]].
 
 *** Footnotes
 
@@ -153,10 +153,10 @@ We'll start that wrestling match in the [[file:mpzfs-1-switching-personalities][
 :EXPORT_FILE_NAME: mpzfs-1-switching-personalities
 :END:
 I have spread story of this journey across a series of posts:
-- [[file:mpzfs-0-premise-research][Part 0: Premise and Research]]
-- *[[file:mpzfs-1-switching-personalities][Part 1: Switching Personalities]]* \Leftarrow you are here
-- [[file:mpzfs-2-export-import-business][Part 2: The Export/Import Business]]
-- [[file:mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]  
+- [[file:../mpzfs-0-questionable-idea][Part 0: A Questionable Idea]]
+- *[[file:../mpzfs-1-switching-personalities][Part 1: Switching Personalities]]* \Leftarrow you are here
+- [[file:../mpzfs-2-export-import-business][Part 2: The Export/Import Business]]
+- [[file:../mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]  
 
 *** Things are so much easier with cloud servers
 
@@ -226,7 +226,7 @@ Rebooted from FreeBSD media and reinstalled yet again, partitioning in the shell
 
 Which turns out to be the winning combination as far ask partitions go.  After a few more laps with the now-visible GRUB menu and command line, I refined the particular menu entry for FreeBSD so that it worked consistently.
 
-In the [[file:mpzfs-2-export-import-business][next part of the series]], we move back to the more important stuff again: actually dealing with ZFS.  You know, the whole point of this whole exercise?
+In the [[file:../mpzfs-2-export-import-business][next part of the series]], we move back to the more important stuff again: actually dealing with ZFS.  You know, the whole point of this whole exercise?
 
 ** Multiple Personality ZFS Part 2: The Export/Import Business
 :PROPERTIES:
@@ -235,10 +235,10 @@ In the [[file:mpzfs-2-export-import-business][next part of the series]], we move
 :END:
 
 I have spread story of this journey across a series of posts:
-- [[file:mpzfs-0-premise-research][Part 0: Premise and Research]]
-- [[file:mpzfs-1-switching-personalities][Part 1: Switching Personalities]] 
-- *[[file:mpzfs-2-export-import-business][Part 2: The Export/Import Business]]* \leftarrow you are here
-- [[file:mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]  
+- [[file:../mpzfs-0-questionable-idea][Part 0: A Questionable Idea]]
+- [[file:../mpzfs-1-switching-personalities][Part 1: Switching Personalities]] 
+- *[[file:../mpzfs-2-export-import-business][Part 2: The Export/Import Business]]* \leftarrow you are here
+- [[file:../mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]  
   
 *** Now back to the important stuff
 
@@ -313,7 +313,7 @@ The timing problem was spent by reading the manual pages for [[https://www.freed
 | =zfs-shared.service=   |         | ~After=zpool-shared.target~     |
 | =zfs-shared.service=   |         | ~WantedBy=multi-user.target~    |
 
-But does it reproduce?  All this work is worth approximately /bupkis/ if nobody can reproduce it.[fn:3]  We'll try to answer that in the [[file:mpzfs-3-no-special-snowflakes][next part of the series]].
+But does it reproduce?  All this work is worth approximately /bupkis/ if nobody can reproduce it.[fn:3]  We'll try to answer that in the [[file:../mpzfs-3-no-special-snowflakes][conclusion of the series]].
 
 *** Footnotes
 
@@ -328,10 +328,10 @@ But does it reproduce?  All this work is worth approximately /bupkis/ if nobody 
 :END:
 
 I have spread story of this journey across a series of posts:
-- [[file:mpzfs-0-premise-research][Part 0: Premise and Research]]
-- [[file:mpzfs-1-switching-personalities][Part 1: Switching Personalities]]
-- [[file:mpzfs-2-export-import-business][Part 2: The Export/Import Business]]
-- *[[file:mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]* \Leftarrow you are here
+- [[file:../mpzfs-0-questionable-idea][Part 0: A Questionable Idea]]
+- [[file:../mpzfs-1-switching-personalities][Part 1: Switching Personalities]]
+- [[file:../mpzfs-2-export-import-business][Part 2: The Export/Import Business]]
+- *[[file:../mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]* \Leftarrow you are here
   
 *** But does it reproduce?
 
