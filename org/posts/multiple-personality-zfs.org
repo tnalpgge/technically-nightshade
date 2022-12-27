@@ -169,13 +169,15 @@ For my day job I spend a lot of time working on cloud-based servers that have on
 
 Oh well, no time like the present to dust off some troubleshooting skills...
 
-I thought that Ubuntu would be nice enough to give me the [[https://www.gnu.org/software/grub/][GRUB]] boot loader screen.  But it didn't.  What am I thinking at this point?  Installing more than one operating system on a /server's/ disk is often silly, because you usually want it to reboot quickly, in a completely unattended fashion.  But many computing professionals just can't stop tinkering with things, and want to get the most out of their computer hardware, so on a /desktop/ with a keyboard and monitor attached it makes more sense to switch between operating systems.
+I thought that [[https://ubuntu.com/][Ubuntu]] would be nice enough to give me the [[https://www.gnu.org/software/grub/][GRUB]] boot loader screen.  But it didn't.  What am I thinking at this point?  Installing more than one operating system on a /server's/ disk is often silly, because you usually want it to reboot quickly, in a completely unattended fashion.  But many computing professionals (and computing non-professionals!) just can't stop tinkering with things, and want to get the most out of their computer hardware, so on a /desktop/ with a keyboard and monitor attached it makes more sense to switch between operating systems.
 
 So on the assumption that treating this PC like a desktop would lead to better results, I redid the Ubuntu install with desktop media instead of server media.  The installer experience was more graphical, but it offered mostly the same set of options.
 
-Mostly.  Not the identical set of options.
+Mostly the same.
 
-One of the side effects of this change was that I couldn't easily use Linux LVM for the main operating system partition directly from the installer, so I chose journaling *XFS* instead.  Another side effect was that the EFI partition used the *ext4* file system whether I liked it or not.  (I didn't, because that would mean I couldn't easily read/write it from FreeBSD.  That is disappointing; we can deal with it later.)  But I went through with the reinstall anyway because those were relatively minor details compared to the concept I was trying to prove.
+Not identical.
+
+One of the side effects of this change was that I couldn't easily use Linux [[https://sourceware.org/lvm2/][LVM]] for the main operating system partition directly from the installer, so I chose journaling [[https://sourceware.org/lvm2/][XFS]] instead.  Another side effect was that the [[https://en.wikipedia.org/wiki/UEFI][EFI]] partition used the [[https://ext4.wiki.kernel.org/index.php/Main_Page][ext4]] file system whether I liked it or not.  (I didn't, because that would mean I couldn't easily read/write it from [[https://www.freebsd.org/][FreeBSD]].  That is disappointing; we can deal with it later.)  But I went through with the reinstall anyway because those were relatively minor details compared to the concept I was trying to prove.
 
 The Ubuntu installer finished and left me with a workable machine.  But I got the same problem.  I still didn't see a GRUB menu.  It always booted straight into Ubuntu.
 
@@ -213,9 +215,9 @@ Since Ubuntu desktop is nice enough to mount =/boot/efi= already, and auto-mount
   update-grub
 #+end_src
 
-It turns out that only =loader.efi= is actually needed.  Think of this as keystroke-efficient, not disk-space-efficient :-)
+It turns out that only =loader.efi= is actually needed.  Think of this as keystroke-efficient, not disk-space-efficient.
 
-Rebooted from FreeBSD media and reinstalled yet again, partitioning in the shell yet again.  This time I ended up with:
+I rebooted from FreeBSD media and reinstalled yet again, partitioning in the shell yet again.  This time I ended up with:
 
 #+begin_example
 # gpart show da0
@@ -229,9 +231,9 @@ Rebooted from FreeBSD media and reinstalled yet again, partitioning in the shell
 
 #+end_example
 
-Which turns out to be the winning combination as far ask partitions go.  After a few more laps with the now-visible GRUB menu and command line, I refined the particular menu entry for FreeBSD so that it worked consistently.
+Which turns out to be the winning combination as far as partitions go.  After a few more laps with the now-visible GRUB menu and command line, I refined the particular menu entry for FreeBSD so that it worked consistently.
 
-In the [[file:../mpzfs-2-export-import-business][next part of the series]], we move back to the more important stuff again: actually dealing with ZFS.  You know, the whole point of this whole exercise?
+In the [[file:../mpzfs-2-export-import-business][next part of the series]], we move back to the more important stuff again: actually dealing with [[https://en.wikipedia.org/wiki/ZFS][ZFS]].  You know, the whole point of this whole exercise?
 
 ** Multiple Personality ZFS Part 2: The Export/Import Business
 :PROPERTIES:
