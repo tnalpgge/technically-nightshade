@@ -21,21 +21,24 @@ I have spread story of this journey across a series of posts:
 
 I've built up a fair amount of data that I want to preserve on this computer.  And I want to access it from either of the operating systems on it, without copying it back and forth and letting the two halves get out of sync.  So the files they share in common would have to use the same on-disk formats.  We'll just choose a file system that both operating systems can read and write, right?  [[https://en.wikipedia.org/wiki/File_Allocation_Table#FAT32][FAT32]] and [[https://en.wikipedia.org/wiki/Bob%27s_your_uncle][Bob's your uncle]].
 
-There's a problem with that idea.  Consider that the /tiny/ matter of syncing a couple of *terabytes* of data to an external SSD formatted with that file system took *days.*  When I reformatted it to something more reasonable (i.e. a file system type that supports UNIX file system semantics) it only took *hours.*  And that's to say absolutely nothing about data integrity or any of that other stuff.  I know I don't like it when my data randomly changes on me because a mosquito on the other side of the planet sneezed.  Do you?
+There's a problem with that idea.  Consider that the /tiny/ matter of syncing a couple of *terabytes* of data to an external SSD formatted with that file system took *days.*  When I reformatted it to something more reasonable (i.e. a UNIX-like file system) it only took *hours.*  And that's to say absolutely nothing about data integrity or any of that other stuff.  I know I don't like it when my data randomly changes on me because a mosquito on the other side of the planet sneezed.  Do you?
 
-Last I checked, the various BSDs and Linuxes didn't really support each other's native file systems very well.  I hear there are facilities like [[https://en.wikipedia.org/wiki/Filesystem_in_Userspace][FUSE]] which can bridge the gap, but I'm really looking for something that feels natively supported in both worlds.
+Last I checked, the various BSDs and Linuxes didn't really support each other's native file systems very well.  I hear there are facilities like [[https://en.wikipedia.org/wiki/Filesystem_in_Userspace][FUSE]] which can bridge the gap, but I'm really looking for something that feels native in both worlds.  That is to say, implemented in the kernel or in loadable kernel modules from a reputable source.
 
-[[https://en.wikipedia.org/wiki/ZFS][ZFS]] is an awesome way to manage computer storage.  It has too many features for me to describe here, but the killer features for me are:
-- less wasted disk space
-- snapshots
+[[https://en.wikipedia.org/wiki/ZFS][ZFS]] is an awesome way to manage computer storage.  It has too many features for me to describe here, but the killer features for me is how little space it wastes.  You don't have to guess how much space a particular file system will take in several years' time.  You won't run out of space until your entire pool of storage runs out of space.
 
-ZFS has some [[https://docs.freebsd.org/en/books/handbook/zfs/#zfs-term][terminology]] which I will be using here, in particular /storage pool,/ /dataset,/ and /property./  Roughly, a storage pool is a collection of devices (entire disks or partitions) providing storage that can be consumed by higher-level constructs.  A dataset is a file system, snapshot, or volume that consumes storage from one storage pool.  A property is metadata about a storage pool or dataset, such as where it appears within the directory tree structure presented to users.
+ZFS has some [[https://docs.freebsd.org/en/books/handbook/zfs/#zfs-term][terminology]] which I will be using here:
+- storage pool :: A collection of one or more devices (entire disks or partitions) providing storage.
+- dataset :: A file system, snapshot, or volume that consumes storage from one storage pool.
+- property :: Metadata about a storage pool or dataset, such as where it appears within the directory tree structure presented to users.
   
 [[https://www.freebsd.org/][FreeBSD]] has been [[https://docs.freebsd.org/en/books/handbook/zfs/][happily using ZFS]] for quite a while now, and they have adopted the [[https://openzfs.org/][OpenZFS]] project's implementation of ZFS.  OpenZFS also works well on [[https://ubuntu.com/][Ubuntu]] and other distributions of Linux.
 
-Well, isn't that interesting!  My hobby PC is primarily running Ubuntu, but I'd rather be running FreeBSD for as much of it as I can.  (There may be some applications that are just too gnarly to work equally well on both; I'm willing to put up with that.)  Maybe we don't have to copy files back and forth after all.  And I do have the ability to create virtual machines pretty easily...perhaps an experiment is in order!
+Well, isn't that interesting!  My hobby PC is primarily running Ubuntu, but I'd rather be running FreeBSD for as much of it as I can.  (There may be some applications that are just too gnarly to work equally well on both; I'm willing to put up with that.)  Maybe we don't have to copy files back and forth after all.
 
-*** The Test Bed
+And I do have the ability to create virtual machines pretty easily.  Perhaps an experiment is in order!
+
+*** The standard test bed
 
 Since we don't want to trash our hobby PC, we'll create a virtual machine instead and trash it instead.  In terms of its virtual hardware, we'll give it:
 
@@ -48,7 +51,7 @@ Since we don't want to trash our hobby PC, we'll create a virtual machine instea
 - no camera
 - [[https://en.wikipedia.org/wiki/UEFI][UEFI]] firmware
 
-This experiment should work with any hypervisor that supports booting guests from UEFI.  I'm assuming I can do this because the physical machine I'm trying to imitate does exactly that.  The physical machine does not use SCSI hardware but the hypervisor available to me offered it as a suggestion for the machine I was trying to build, so I took it.  The device names may change a bit for [[https://en.wikipedia.org/wiki/SATA][SATA]] or [[https://en.wikipedia.org/wiki/NVMe][NVMe]] drives, but the concepts should still apply.
+This experiment should work with any [[https://en.wikipedia.org/wiki/Hypervisor][hypervisor]] that supports booting guests from UEFI.  I'm assuming I can do this because the physical machine I'm trying to imitate boots from UEFI.  The physical machine does not use SCSI hardware, but the hypervisor available to me offered it as a suggestion for the machine I was trying to build, so I took it.  The device names may change a bit for [[https://en.wikipedia.org/wiki/SATA][SATA]] or [[https://en.wikipedia.org/wiki/NVMe][NVMe]] drives, but the concepts should still apply.
 
 *** What would FreeBSD do?
 
@@ -72,7 +75,7 @@ FreeBSD calls the first SCSI disk ~da0~, and the various GPT partitions within i
 /dev/da0p3 none swap sw 0 0
 #+end_example
 
-ZFS does not need the traditional ~/etc/fstab~ method to get everything mounted.  Every dataset in a storage pool that sets a property named =mountpoint= can declare its preferred mountpoint.  ZFS reads all these properties to get things mounted.  A storage pool has its usual mount point set when it is created, but one can use a property to /temporarily/ change the mount point for the root dataset in the pool.  This can be very useful when attempting storage shenanigans such as we are about to do, or when you want to tell your operating system that yes, you really want all of your file systems to be ZFS datasets!
+ZFS does not need the traditional ~/etc/fstab~ method to get everything mounted.  Every dataset in a storage pool that sets a property named =mountpoint= can declare its preferred mount point.  ZFS reads all these properties to get things mounted.  A storage pool has its usual mount point set when it is initially created, but one can use the property =altroot= to /temporarily/ change the mount point for the root dataset in the pool.  This can be very useful when attempting storage shenanigans (i.e. this experiment), or when you want to tell your operating system's installer that yes, you really want all of your file systems to be ZFS datasets!
 
 *** What would Ubuntu do?
 
@@ -91,7 +94,7 @@ Device       Start      End  Sectors  Size Type
 
 *** Adding ZFS
 
-I assumed that creating a new storage pool under Ubuntu would be more likely to produce compatible results.  So away we go!  Running with superuser permissions, either via ~sudo~ or from a proper root shell, we'll dedicate that entire second SCSI disk (=sdb= in Linux-speak) to it.
+I assumed that creating a new storage pool under Ubuntu would be more likely to produce compatible results.  So away we go!  Running with superuser permissions, either via ~sudo~ or from a proper root shell, we'll dedicate that entire second SCSI disk (=sdb= in Linux-speak, =da1= in FreeBSD-speak) to it.
 
 #+begin_src sh
   apt install zfsutils-linux
@@ -112,7 +115,9 @@ Device        Start      End  Sectors Size Type
 
 It built a GPT for us.  How considerate!
 
-One of the neat things about storage pools is that you can mount them on any system than understands them and you should be able to pick up where you left off.  This is called /importing/ a storage pool.  Which implies that it must be /exported,/ even if you don't move physical disks around.  So before we shut down, we'll export =zdata= to see if we can import it.
+One of the neat things about storage pools is that you can mount them on any system than understands them and you should be able to pick up where you left off.   This is called /importing/ a storage pool.  Which implies that it must be /exported,/ even if you don't move physical disks around.  And such a concept does exist; it is the act of logically detaching the storage pool from the system and marking it as not currently in use by that system.
+
+So before we shut down, we'll export =zdata= to see if we can import it.
 
 #+begin_src
   zpool export zdata
@@ -139,7 +144,7 @@ I had arrived at this GPT:
   83884032      2015      - free -  (1.0M)
 #+end_example
 
-So I had assumed at this point that I was doing quite well.  It wasn't a terrible assumption, but it wasn't that great either.  Why?  Because I hadn't yet wrestled with the elephant in the room: easily booting one computer into either operating system without relying upon install media.
+I had assumed at this point that I was doing quite well.  It wasn't a terrible assumption, but it wasn't that great either.  Why?  Because I hadn't yet wrestled with the elephant in the room: easily booting one computer into either operating system without relying upon install media.
 
 We'll start that wrestling match in the [[file:../mpzfs-1-switching-personalities][next post in the series]].
 
