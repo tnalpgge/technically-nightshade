@@ -2,7 +2,7 @@
 * Posts
 ** Multiple Personality ZFS Part 0: A Questionable Idea
 :PROPERTIES:
-:EXPORT_DATE: 2022-12-26
+:EXPORT_DATE: 2022-12-27
 :EXPORT_FILE_NAME: mpzfs-0-questionable-idea
 :END:
 *** Introduction
@@ -155,7 +155,7 @@ We'll start that wrestling match in the [[file:../mpzfs-1-switching-personalitie
 
 ** Multiple Personality ZFS Part 1: Switching Personalities
 :PROPERTIES:
-:EXPORT_DATE: 2022-12-27
+:EXPORT_DATE: 2022-12-28
 :EXPORT_FILE_NAME: mpzfs-1-switching-personalities
 :END:
 I have spread story of this journey across a series of posts:
@@ -238,7 +238,7 @@ In the [[file:../mpzfs-2-export-import-business][next part of the series]], we m
 
 ** Multiple Personality ZFS Part 2: The Export/Import Business
 :PROPERTIES:
-:EXPORT_DATE: 2022-12-27
+:EXPORT_DATE: 2022-12-29
 :EXPORT_FILE_NAME: mpzfs-2-export-import-business
 :END:
 
@@ -341,7 +341,7 @@ But does it reproduce?  All this work is worth approximately /bupkis/ if nobody 
 
 ** Multiple Personality ZFS Part 3: No Special Snowflakes
 :PROPERTIES:
-:EXPORT_DATE: 2022-12-27
+:EXPORT_DATE: 2022-12-30
 :EXPORT_FILE_NAME: mpzfs-3-no-special-snowflakes
 :END:
 
