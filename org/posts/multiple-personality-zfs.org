@@ -1,21 +1,27 @@
 #+hugo_base_dir: ../..
 * Posts
-** Multiple Personality ZFS
+** Multiple Personality ZFS Part 0: Premise and Research
 :PROPERTIES:
-:EXPORT_DATE: 2022-12-24
-:EXPORT_FILE_NAME: multiple-personality-zfs
+:EXPORT_DATE: 2022-12-26
+:EXPORT_FILE_NAME: mpzfs-0-premise-and-research
 :END:
 *** Introduction
 
 I have a computer that I use for a particular hobby.  And it runs a decent operating system for what I want to accomplish with it.  But it's not my preferred operating system.  I wonder if I can share my home directory between two operating systems that never run concurrently.  That sounds a lot better than copying files back and forth in an effort to keep things in sync.
 
-So the hobby is kind of niche.  And the people who use [[https://unix.org/][UNIX]]-like operating systems for that hobby is sub-niche.  And people who use [[https://en.wikipedia.org/wiki/Berkeley_Software_Distribution][BSD]]-based operating systems for that hobby is sub-sub-niche.  So I'm not expecting any sort of revolution to spawn out of this particular post.  In fact, this is arguably a useless exercise.  But why let that stop us from exploring?  Maybe we'll learn something useful along the way.
+So the hobby is kind of niche.  And the people who use [[https://unix.org/][UNIX]]-like operating systems for that hobby is sub-niche.  And people who use [[https://en.wikipedia.org/wiki/Berkeley_Software_Distribution][BSD]]-based operating systems for that hobby is sub-sub-niche.  So I'm not expecting any sort of revolution to spawn out of this.  In fact, this is arguably a useless exercise.  But why let that stop us from exploring?  Maybe we'll learn something useful along the way.
+
+I have spread story of this journey across a series of posts:
+- *[[file:mpzfs-0-premise-research][Part 0: Premise and Research]]* \Leftarrow you are here
+- [[file:mpzfs-1-switching-personalities][Part 1: Switching Personalities]]
+- [[file:mpzfs-2-export-import-business][Part 2: The Export/Import Business]]
+- [[file:mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]
 
 *** Background
 
-I've built up a fair amount of data that I want to preserve on this computer.  And I want to access it from either of the operating systems on it, without copying it back and forth and letting the two halves get out of sync.  So the files they share in common would have to use the same on-disk formats.  We'll just choose a file system that both operating systems can read and write, right?  FAT32, [[https://en.wikipedia.org/wiki/Bob%27s_your_uncle][Bob's your uncle]].
+I've built up a fair amount of data that I want to preserve on this computer.  And I want to access it from either of the operating systems on it, without copying it back and forth and letting the two halves get out of sync.  So the files they share in common would have to use the same on-disk formats.  We'll just choose a file system that both operating systems can read and write, right?  [[https://en.wikipedia.org/wiki/File_Allocation_Table#FAT32][FAT32]] and [[https://en.wikipedia.org/wiki/Bob%27s_your_uncle][Bob's your uncle]].
 
-So there's a problem with that idea.  Consider that the tiny matter of syncing a couple of terabytes worth of data to an external SSD formatted with that filesystem took *days.*  When I reformatted it to something more reasonable, it only took *hours.*  And that's to say absolutely nothing about data integrity or any of that other stuff.
+There's a problem with that idea.  Consider that the /tiny/ matter of syncing a couple of *terabytes* of data to an external SSD formatted with that file system took *days.*  When I reformatted it to something more reasonable (i.e. a file system type that supports UNIX file system semantics) it only took *hours.*  And that's to say absolutely nothing about data integrity or any of that other stuff.  I know I don't like it when my data randomly changes on me because a mosquito on the other side of the planet sneezed.  Do you?
 
 Last I checked, the various BSDs and Linuxes didn't really support each other's native file systems very well.  I hear there are facilities like [[https://en.wikipedia.org/wiki/Filesystem_in_Userspace][FUSE]] which can bridge the gap, but I'm really looking for something that feels natively supported in both worlds.
 
@@ -23,7 +29,7 @@ Last I checked, the various BSDs and Linuxes didn't really support each other's 
 - less wasted disk space
 - snapshots
 
-ZFS has some [[https://docs.freebsd.org/en/books/handbook/zfs/#zfs-term][terminology]] which I will be using here, in particular /pool/ and /dataset/.
+ZFS has some [[https://docs.freebsd.org/en/books/handbook/zfs/#zfs-term][terminology]] which I will be using here, in particular /storage pool,/ /dataset,/ and /property./  Roughly, a storage pool is a collection of devices (entire disks or partitions) providing storage that can be consumed by higher-level constructs.  A dataset is a file system, snapshot, or volume that consumes storage from one storage pool.  A property is metadata about a storage pool or dataset, such as where it appears within the directory tree structure presented to users.
   
 [[https://www.freebsd.org/][FreeBSD]] has been [[https://docs.freebsd.org/en/books/handbook/zfs/][happily using ZFS]] for quite a while now, and they have adopted the [[https://openzfs.org/][OpenZFS]] project's implementation of ZFS.  OpenZFS also works well on [[https://ubuntu.com/][Ubuntu]] and other distributions of Linux.
 
@@ -35,18 +41,20 @@ Since we don't want to trash our hobby PC, we'll create a virtual machine instea
 
 - 8 GB of memory
 - 2 virtual CPUs
-- an ethernet interface
-- a 40 GB SCSI hard drive for operating systems
+- an [[https://en.wikipedia.org/wiki/Ethernet][ethernet]] network interface
+- a 40 GB [[https://en.wikipedia.org/wiki/SCSI][SCSI]] hard drive for operating systems
 - a 20 GB SCSI hard drive for the shared data
 - no sound card
 - no camera
-- UEFI firmware
+- [[https://en.wikipedia.org/wiki/UEFI][UEFI]] firmware
+
+This experiment should work with any hypervisor that supports booting guests from UEFI.  I'm assuming I can do this because the physical machine I'm trying to imitate does exactly that.  The physical machine does not use SCSI hardware but the hypervisor available to me offered it as a suggestion for the machine I was trying to build, so I took it.  The device names may change a bit for [[https://en.wikipedia.org/wiki/SATA][SATA]] or [[https://en.wikipedia.org/wiki/NVMe][NVMe]] drives, but the concepts should still apply.
 
 *** What would FreeBSD do?
 
 We'll start by installing FreeBSD 13.1-RELEASE in the standard way from the usual downloadable ISO image, telling it to use the entirety of the first disk as a ZFS storage pool.  Then we'll see what the resulting [[https://en.wikipedia.org/wiki/GUID_Partition_Table][GPT]] looks like.[fn:1]
 
-FreeBSD calls the first SCSI disk ~da0~, and the various GPT partitions within it ~da0p1~, ~da0p2~, etc.
+FreeBSD calls the first SCSI disk ~da0~, and the various GPT partitions within it ~da0p1~, ~da0p2~, etc.  (For SATA the device names would be ~ada0~ for the disk itself and ~ada0p1~ for the first partition on it.)
 
 #+begin_example
 # gpart show da0
@@ -64,11 +72,11 @@ FreeBSD calls the first SCSI disk ~da0~, and the various GPT partitions within i
 /dev/da0p3 none swap sw 0 0
 #+end_example
 
-ZFS does not need the traditional ~/etc/fstab~ method to get everything mounted.
+ZFS does not need the traditional ~/etc/fstab~ method to get everything mounted.  Every dataset in a storage pool that sets a property named =mountpoint= can declare its preferred mountpoint.  ZFS reads all these properties to get things mounted.  A storage pool has its usual mount point set when it is created, but one can use a property to /temporarily/ change the mount point for the root dataset in the pool.  This can be very useful when attempting storage shenanigans such as we are about to do, or when you want to tell your operating system that yes, you really want all of your file systems to be ZFS datasets!
 
 *** What would Ubuntu do?
 
-Let's repeat the exercise with Ubuntu 22.04 LTS, using their server install media.  Linux calls the first SCSI disk =sda=, with the partitions within it being =sda1=, =sda2=, etc.
+Let's repeat the exercise with Ubuntu 22.04 LTS, using their server install media.  Linux calls the first SCSI disk =sda=, with the partitions within it being =sda1=, =sda2=, etc.  (The first SATA disk would be =hda=, and the first partition within it =hda1=.)
 
 #+begin_example
 # fdisk -l /dev/sda
@@ -102,7 +110,7 @@ Device        Start      End  Sectors Size Type
 /dev/sdb9  41924608 41940991    16384   8M Solaris reserved 1
 #+end_example
 
-Wasn't that considerate!  It built a GPT for us.
+It built a GPT for us.  How considerate!
 
 One of the neat things about storage pools is that you can mount them on any system than understands them and you should be able to pick up where you left off.  This is called /importing/ a storage pool.  Which implies that it must be /exported,/ even if you don't move physical disks around.  So before we shut down, we'll export =zdata= to see if we can import it.
 
@@ -114,7 +122,9 @@ Note that if we had any mounted file systems (datasets) from =zdata=, ~zpool exp
 
 *** But can we really share it?
 
-I booted from the FreeBSD install media and intentionally chose the most difficult partitioning option so as not to disturb the Ubuntu install.  (It was a lot of typing, based on research I had done a while ago into automated customized FreeBSD installs, and you'll see some of the results later.)  I had arrived at this GPT partition table:
+I booted from the FreeBSD install media and intentionally chose the most difficult partitioning option so as not to disturb the Ubuntu install.  (It was a lot of typing, based on [[https://www.freebsd.org/cgi/man.cgi?query=bsdinstall&apropos=0&sektion=0&manpath=FreeBSD+13.1-RELEASE+and+Ports&arch=default&format=html#end][research]] I had done a while ago into automated customized FreeBSD installs, and you'll see some of the results later.)
+
+I had arrived at this GPT:
 
 #+begin_example
 # gpart show da0
@@ -131,15 +141,38 @@ I booted from the FreeBSD install media and intentionally chose the most difficu
 
 So I had assumed at this point that I was doing quite well.  It wasn't a terrible assumption, but it wasn't that great either.  Why?  Because I hadn't yet wrestled with the elephant in the room: easily booting one computer into either operating system without relying upon install media.
 
+We'll start that wrestling match in the [[file:mpzfs-1-switching-personalities][next post in the series]].
+
+*** Footnotes
+
+[fn:1] "GPT partition table" is a redundant phrase.
+
+** Multiple Personality ZFS Part 1: Switching Personalities
+:PROPERTIES:
+:EXPORT_DATE: 2022-12-27
+:EXPORT_FILE_NAME: mpzfs-1-switching-personalities
+:END:
+I have spread story of this journey across a series of posts:
+- [[file:mpzfs-0-premise-research][Part 0: Premise and Research]]
+- *[[file:mpzfs-1-switching-personalities][Part 1: Switching Personalities]]* \Leftarrow you are here
+- [[file:mpzfs-2-export-import-business][Part 2: The Export/Import Business]]
+- [[file:mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]  
+
 *** Things are so much easier with cloud servers
 
-For my day job I spend a lot of time working on cloud-based servers that have only one operating system installed.  So there's a whole world of problems I don't get to deal with on a regular basis.  Oh well, no time like the present to dust off some troubleshooting skills...
+For my day job I spend a lot of time working on cloud-based servers that have only one operating system installed.  So there's a whole world of problems I don't deal with on a regular basis.
 
-I thought that Ubuntu would be nice enough to give me the [[https://www.gnu.org/software/grub/][GRUB]] boot loader screen.  But it didn't.  What am I thinking at this point?  Installing more than one operating system on a server's disk is often silly, because you usually want it to reboot quickly, in a completely unattended fashion.
+Oh well, no time like the present to dust off some troubleshooting skills...
 
-So I redid the Ubuntu install with desktop instead of server.  One of the side effects of this decision was that I couldn't easily use Linux LVM for the main operating system partition, so I chose journaling *XFS* instead.  Another side effect was that the EFI partition used the *ext4* filesystem whether I liked it or not.  (I didn't, because that would mean I couldn't easily read/write it from FreeBSD.)  But I went through with the reinstall anyway because those were relatively minor details compared to the concept I was trying to prove..
+I thought that Ubuntu would be nice enough to give me the [[https://www.gnu.org/software/grub/][GRUB]] boot loader screen.  But it didn't.  What am I thinking at this point?  Installing more than one operating system on a /server's/ disk is often silly, because you usually want it to reboot quickly, in a completely unattended fashion.  But many computing professionals just can't stop tinkering with things, and want to get the most out of their computer hardware, so on a /desktop/ with a keyboard and monitor attached it makes more sense to switch between operating systems.
 
-But I got the same problem.  I still didn't see a GRUB menu.  It always booted straight into Ubuntu.
+So on the assumption that treating this PC like a desktop would lead to better results, I redid the Ubuntu install with desktop media instead of server media.  The installer experience was more graphical, but it offered mostly the same set of options.
+
+Mostly.  Not the identical set of options.
+
+One of the side effects of this change was that I couldn't easily use Linux LVM for the main operating system partition directly from the installer, so I chose journaling *XFS* instead.  Another side effect was that the EFI partition used the *ext4* file system whether I liked it or not.  (I didn't, because that would mean I couldn't easily read/write it from FreeBSD.  That is disappointing; we can deal with it later.)  But I went through with the reinstall anyway because those were relatively minor details compared to the concept I was trying to prove.
+
+The Ubuntu installer finished and left me with a workable machine.  But I got the same problem.  I still didn't see a GRUB menu.  It always booted straight into Ubuntu.
 
 Eventually I found [[https://askubuntu.com/questions/16042/how-to-get-to-the-grub-menu-at-boot-time][How to get the GRUB menu at boot-time?]] which directed me to change two lines near the top of =/etc/default/grub=:
 
@@ -150,7 +183,7 @@ Eventually I found [[https://askubuntu.com/questions/16042/how-to-get-to-the-gru
 
 So now I could reboot back into Ubuntu and get the menu.  And that meant I could quite likely craft a menu entry that would help me boot FreeBSD.
 
-You know, I didn't embark on this path just so I could wrestle with boot loaders all the time.  Oh well, we'll get this out of the way.  Good thing we set up a throwaway virtual machine for this, otherwise we'd be in some real trouble!
+You know, I didn't embark on this path just so I could wrestle with boot loaders all the time.  Oh well, we'll get this out of the way.  Good thing we set up a throwaway virtual machine for this, otherwise we'd be in some real trouble!  Mucking around with partitions and boot loaders and install media is a great way to induce data loss.
 
 This is where having built the EFI partition came in handy.  After banging about a bit more, and consulting these pages in particular:
 
@@ -166,7 +199,7 @@ I arrived at this menu entry that I appended to =/etc/grub.d/40_custom= on Ubunt
   }  
 #+end_src
 
-Since Ubuntu desktop is nice enough to mount =/boot/efi= already, and auto-mount any CD you put in the drive, it was very easy to copy the necessary EFI-related files from FreeBSD media:
+Since Ubuntu desktop is nice enough to mount =/boot/efi= already, and auto-mount any CD you put in the drive, it was very easy to copy the necessary EFI-related files from FreeBSD media.
 
 #+begin_src sh
   mkdir -p /boot/efi/EFI/FreeBSD
@@ -191,8 +224,22 @@ Rebooted from FreeBSD media and reinstalled yet again, partitioning in the shell
 
 #+end_example
 
-Which turns out to be the winning combination as far ask partitions go.  After a few more laps with the now-visible GRUB menu and command line, I refined the particular menu entry for FreeBSD so that it worked consistently.  (I'll share it at the end.)
+Which turns out to be the winning combination as far ask partitions go.  After a few more laps with the now-visible GRUB menu and command line, I refined the particular menu entry for FreeBSD so that it worked consistently.
 
+In the [[file:mpzfs-2-export-import-business][next part of the series]], we move back to the more important stuff again: actually dealing with ZFS.  You know, the whole point of this whole exercise?
+
+** Multiple Personality ZFS Part 2: The Export/Import Business
+:PROPERTIES:
+:EXPORT_DATE: 2022-12-28
+:EXPORT_FILE_NAME: mpzfs-2-export-import-business
+:END:
+
+I have spread story of this journey across a series of posts:
+- [[file:mpzfs-0-premise-research][Part 0: Premise and Research]]
+- [[file:mpzfs-1-switching-personalities][Part 1: Switching Personalities]] 
+- *[[file:mpzfs-2-export-import-business][Part 2: The Export/Import Business]]* \leftarrow you are here
+- [[file:mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]  
+  
 *** Now back to the important stuff
 
 So we need to export our chosen storage pool every time we shut down Ubuntu.  As much as I prefer the FreeBSD system of initialization scripts, and regard [[https://systemd.io/][systemd]] with a degree of suspicion, it is generally a good idea to work within the framework that the operating system provides.  A few more web searches yielded these useful links:
@@ -217,7 +264,7 @@ Which I boiled down to this *systemd* service, stored in ~/etc/systemd/system/zp
   WantedBy=zfs.target
 #+end_src
 
-It's a blunt instrument, thanks to the =-a= and =-f= flags.  We'll refine it later to be more precise.
+It's a blunt instrument, thanks to the =-a= and =-f= flags.  We'll probably have to refine it later to be more precise.
 
 #+begin_src sh
   systemctl daemon-reload
@@ -225,11 +272,9 @@ It's a blunt instrument, thanks to the =-a= and =-f= flags.  We'll refine it lat
   systemctl start zpool-export.service
 #+end_src
 
-Now I can reboot back into Ubuntu as many times as I want in a row and the datasets in the =zdata= storage pool mount automatically.
+Now I can reboot back into Ubuntu as many times as I want in a row and the datasets in the =zdata= storage pool mount automatically.  But that's not really an accomplishment, is it?  *We have to address what FreeBSD thinks.*  We want to be able to boot back and forth between the two freely, and see the same data on the shared pool.
 
-But that's not really an accomplishment, is it?  We have to address what FreeBSD thinks.  We want to be able to boot back and forth between the two freely, and see the same data on the shared pool.
-
-Examining the various *systemd* units that came with the =zfsutils-linux= package, I saw that they were taking a two-step approach:
+Examining the various *systemd* units that came with the =zfsutils-linux= package,[fn:2] I saw that they were taking a two-step approach:
 
 1. import the storage pools /without/ mounting the datasets as file systems
 1. mount all the ZFS datasets as file systems
@@ -240,7 +285,7 @@ First, a script which imports the storage pools from certain devices but does no
 
 Then, a script that "starts" its service by mounting the ZFS datasets from those storage pools as file systems.  And do the opposite when the service "stops."  This would be installed as =/usr/local/etc/rc.d/zfs-shared=.
 
-Add in a few key words so that FreeBSD can properly order the scripts and we should have it!  Let's set the key variables that trigger the desired behaviors from FreeBSD's initialization system.
+Add in a few key comments so that FreeBSD can properly order the scripts and we should have it!  Let's set the key variables that trigger the desired behaviors from FreeBSD's initialization system.
 
 #+begin_src sh
   sysrc zpool_shared_enable=YES zpool_shared_devices=/dev/da1p1 zpool_shared_pools=zdata
@@ -249,7 +294,7 @@ Add in a few key words so that FreeBSD can properly order the scripts and we sho
 
 ~zpool_shared_enable~ and ~zfs_shared_enable~ should be self-explanatory by their names.
 
-~zpool_shared_devices~ specifies what devices to search on for storage pools.  ~zpool_shared_pools~ gives the names of the pools we expect to find.  ~zfs_shared_datasets~ lists the common prefixes of dataset names (usually the names of the storage pools that contain them) that we will consider interesting for this purpose.  Note this does not include the main FreeBSD storage pool which is traditionally named =zroot=.
+~zpool_shared_devices~ specifies what devices to search on for storage pools.  ~zpool_shared_pools~ gives the names of the pools we expect to find.  ~zfs_shared_datasets~ lists the common prefixes of dataset names (usually the names of the storage pools that contain them) that we will consider interesting for this purpose.  Note this does not include the main FreeBSD storage pool which the installer traditionally names =zroot=.
 
 I booted back and forth between Ubuntu and FreeBSD, using the appropriate GRUB menu entries, and saw that the =zdata= pool and its datasets were not always mounted.  This would take some debugging, mostly on the Ubuntu side.  To imitate the approach that was working on the FreeBSD side, I created two *systemd* services, one for the storage pools and the other for the data sets.  I offloaded all the logic into scripts stored in =/usr/local/sbin/zpool-shared= and =/usr/local/sbin/zfs-shared= respectively.  Instead of reading values (indirectly) from =/etc/rc.conf= they would look under =/etc/default/zpool-shared= and =/etc/default/zfs-shared= respectively for key variables.  Aside from the specific variable names, and the details of dealing with each operating system's initialization paradiagms, the main logic of the scripts for both operating systems was identical.
 
@@ -257,36 +302,196 @@ There were two main sources of trouble:
 - *systemd* was trying to mount the ZFS datasets before the storage pool completed its import.  Oops!
 - My scripts were not gracefully handling the cases where the storage pools were already imported or the datasets were already mounted.
 
-The timing problem was spent by reading the manual pages for [[https://www.freedesktop.org/software/systemd/man/systemd.exec.html#][systemd.exec(5)], [[https://www.freedesktop.org/software/systemd/man/systemd.service.html#][systemd.service(5)]], [[https://www.freedesktop.org/software/systemd/man/systemd.target.html#][systemd.target(5)]], and [[https://www.freedesktop.org/software/systemd/man/systemd.unit.html#][systemd.unit(5)]].  In particular, proper use of =Requires=, =After=, and =WantedBy= got me the ordering I was looking for.
+The timing problem was spent by reading the manual pages for [[https://www.freedesktop.org/software/systemd/man/systemd.exec.html#][systemd.exec(5)], [[https://www.freedesktop.org/software/systemd/man/systemd.service.html#][systemd.service(5)]], [[https://www.freedesktop.org/software/systemd/man/systemd.target.html#][systemd.target(5)]], and [[https://www.freedesktop.org/software/systemd/man/systemd.unit.html#][systemd.unit(5)]].  In particular, proper use of =Requires=, =After=, and =WantedBy= got me the ordering I was looking for, which is summarized here:
 
-| =zpool-shared.service= | =Requires= | =zfs.target= |
-| =zpool-shared.service= | =After= | =zfs.target=
-| =zpool-shared.target= | =Requires= | =zpool-shared.service= |
-| =zfs-shared.service= | =Requires= | =zpool-shared.target= |
-| =zfs-shared.service= | =After= | =zpool-shared.target= |
-| =zfs-shared.service= | =WantedBy= | =multi-user.target= |
+| Unit file              | Section | Ordering constraint             |
+|------------------------+---------+---------------------------------|
+| =zpool-shared.service= |         | ~Requires=zfs.target~           |
+| =zpool-shared.service= |         | ~After=zfs.target~              |
+| =zpool-shared.target=  |         | ~Requires=zpool-shared.service~ |
+| =zfs-shared.service=   |         | ~Requires=zpool-shared.target~  |
+| =zfs-shared.service=   |         | ~After=zpool-shared.target~     |
+| =zfs-shared.service=   |         | ~WantedBy=multi-user.target~    |
 
+But does it reproduce?  All this work is worth approximately /bupkis/ if nobody can reproduce it.[fn:3]  We'll try to answer that in the [[file:mpzfs-3-no-special-snowflakes][next part of the series]].
+
+*** Footnotes
+
+[fn:2] ~find /lib/systemd/system -type f -name 'zfs*'~
+
+[fn:3] Synonyms to this colorful Yiddish word, which may have originally meant beans but evolved to describe the excrement of certain ungulates, may include [[https://www.urbandictionary.com/define.php?term=the%20square%20root%20of%20bugger%20all][the square root of bugger all]].  Ungulate excrement is generally regarded as not immediately useful for computing, though there may be extremely indirect applications that remain to be researched.
+
+** Multiple Personality ZFS Part 3: No Special Snowflakes
+:PROPERTIES:
+:EXPORT_DATE: 2022-12-29
+:EXPORT_FILE_NAME: mpzfs-3-no-special-snowflakes
+:END:
+
+I have spread story of this journey across a series of posts:
+- [[file:mpzfs-0-premise-research][Part 0: Premise and Research]]
+- [[file:mpzfs-1-switching-personalities][Part 1: Switching Personalities]]
+- [[file:mpzfs-2-export-import-business][Part 2: The Export/Import Business]]
+- *[[file:mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]* \Leftarrow you are here
+  
 *** But does it reproduce?
 
-My co-workers know me as a person who likes command lines, and whose definition of a "one-liner" may be a bit...expansive at times.  So could I replicate the results in a slightly different environment, with fewer frills?  Let's replace Ubuntu with [[https://www.debian.org/][Debian]] 11 "Bullseye," selecting only the most basic options, and see if we can make it work.  In particular, there is no distinction between a server and a desktop, you get the features you ask for and you don't get the features you don't.  (We're keeping FreeBSD in every iteration of this experiment, thank you very much!)
+My co-workers know me as a person who likes command lines, and whose definition of a "one-liner" may be a bit...expansive at times.  So could I replicate the results in a slightly different environment, with fewer frills, with fewer graphical installs, and with more typing?  Let's replace Ubuntu 22.04 LTS "Jammy Jellyfish" with [[https://www.debian.org/][Debian]] 11 "Bullseye," selecting only the most basic options, and see if we can make it work.
 
-*** Future refinements
+In particular, there is no distinction between a server and a desktop, you get the features you ask for and you don't get the features you don't.  (We're keeping FreeBSD in every iteration of this experiment, thank you very much!)
 
-If I were to repeat this I don't know that I would go through the desktop installer for Ubuntu -- or at least I would get familiar enough with it that I could do the disk partitioning exactly the way I would want:
+*** A new machine part 1: Debian
 
-| Linux name     | Linux mount | FreeBSD name | FreeBSD mount | Size  | Format      | Purpose                |
-|----------------+-------------+--------------+---------------+-------+-------------+------------------------|
-| sda1           | ~/boot/efi~ | da0p1        | ~/boot/efi~   | 1 GB  | fat32       | EFI                    |
-| sda2           | ~/boot~     | da0p2        |               | 2 GB  | ext4        | Linux boot             |
-| sda3           |             | da0p3        |               | 18 GB | linux-lvm   | Linux LVM partition    |
-| sda3 vg0       |             |              |               |       |             | Linux LVM volume group |
-| sda3 vg0-lv--0 | ~/~         |              |               |       | ext4        | Linux OS               |
-| sda4           | swap        | da0p4        | swap          | 2 GB  | who cares?  | Swap space             |
-| sda5           |             | da0p5        | ~/~           | 17 GB | freebsd-zfs | FreeBSD OS             |
-| sdb1           | ~/zhome~    | da1p1        | ~/zhome~      | 20 GB | apple-zfs   | Shared pool =zdata=    |
-| sdb9           |             | da1p9        |               | 8 MB  | reserved    | reserved               |
+I created a new virtual machine that had the same shape and size, but with fresh disks of its own.  I ran through the Debian installer in a fairly straightforward form, and manually chose a set of disk partitions that consumed half the disk.  They looked like this:
+
+| Index | Size  | Filesystem | Mount point | Name       | Purpose              |
+|-------+-------+------------+-------------+------------+----------------------|
+|     1 | 1 GB  | EFI        | (automatic) | efi        | EFI system partition |
+|     2 | 2 GB  | ext4       | ~/boot~     | linux-boot | Linux boot           |
+|     3 | 18 GB | linux-lvm  | see below   | linux-lvm  | Linux LVM            |
+|     4 | 2 GB  | swap       | (none)      | swap       | Swap                 |
+
+And within the LVM partition =/dev/sda3/=:
+- One single volume group =vg0=, consuming as much as possible
+- One single logical Volume =lv0=, consuming all of =vg0=, mounted at =/=
+
+The rest of the disk would be consumed by FreeBSD.
+
+I had +brilliantly+[fn:4] declined to install the common system utilities.  When I finally rebooted into this fresh system, I had to use the *su* utility and a root password -- much like the primitive system administrators of yore -- to reach a tolerable setup where I could use *sudo* and a screen-oriented text editor.  But after that brief ordeal, it was time to install the ZFS packages via the [[https://openzfs.github.io/openzfs-docs/Getting%20Started/Debian/index.html][getting started guide for Debian]].    Examining the system with available text-oriented tools, we see the following.
+
+#+begin_example
+$ lsblk
+NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sda           8:0    0   40G  0 disk
+|-sda1        8:1    0  953M  0 part /boot/efi
+|-sda2        8:2    0  1.9G  0 part /boot
+|-sda3        8:3    0 16.8G  0 part
+| `-vg0-lv0 254:0    0 16.8G  0 lvm  /
+`-sda4        8:4    0  1.9G  0 part [SWAP]
+sdb           8:16   0   20G  0 disk
+|-sdb1        8:17   0   20G  0 part
+`-sdb9        8:25   0    8M  0 part
+sr0           11:0   1 1024M  0 rom
+#+end_example
+
+#+begin_example
+$ sudo partx -s /dev/sda
+NR    START      END  SECTORS  SIZE NAME       UUID
+ 1     2048  1953791  1951744  953M efi        ...
+ 2  1953792  5859327  3905536  1.9G linux-boot ...
+ 3  5859328 41015295 35155968 16.8G linux-lvm  ...
+ 4 41015296 44920831  3905536  1.9G swap       ...
+#+end_example
+
+Creation of the =zdata= storage pool on =sdb1= and the =zdata/home= dataset within it were straightforward, and identical to what we did earlier.
+
+#+begin_example
+$ sudo partx -s /dev/sdb
+NR    START      END  SECTORS SIZE NAME                 UUID
+ 1     2048 41924607 41922560 20G  zfs-be42e62def1bd6ad ...
+ 9 41924608 41940991    16384  8M                       ...
+#+end_example
+
+#+begin_example
+$ zpool list
+NAME    SIZE  ALLOC   FREE CKPOINT  EXPANDSZ   FRAG    CAP  DEDUP    HEALTH  ALTROOT
+zdata  19.5G   184K  19.5G       -         -     0%     0%  1.00x    ONLINE  -
+#+end_example
+
+Our datasets have indeed been created:
+
+#+begin_example
+$ zfs list
+NAME         USED  AVAIL     REFER  MOUNTPOINT
+zdata        184K  18.9G       24K  /zdata
+zdata/home  24.5K  18.9G     24.5K  /zhome
+#+end_example
+
+And they have been mounted as well:
+
+#+begin_example
+$ df
+Filesystem           Size  Used Avail Use% Mounted on
+udev                 3.9G     0  3.9G   0% /dev
+tmpfs                796M  660K  796M   1% /run
+/dev/mapper/vg0-lv0   17G  1.6G   16G  10% /
+tmpfs                3.9G     0  3.9G   0% /dev/shm
+tmpfs                3.0M     0  5.0M   0% /run/lock
+/dev/sda2            1.8G   50M  1.7G   3% /boot
+/dev/sda1            952M  5.8M  946M   1% /boot/efi
+zdata                 19G  128K   19G   1% /zdata
+zdata/home            19G  128K   19G   1% /zhome
+#+end_example
+
+We got lucky with one of the choices that Debian made:
+
+#+begin_example
+$ mount | grep /boot/efi
+/dev/sda1 on /boot/efi type vfat (rw,relatime,fmask=0077,dmask=0077,codepage=437,iocharset=ascii,shortname=mixed,utf8,errors=remount-ro)
+#+end_example
+
+What Debian calls =vfat= FreeBSD calls =msdosfs=, which can be mounted and written natively.  So hopefully we won't have to engage in a manual step to get the FreeBSD boot loader executable in place.
+
+I proceeded to copy files from the Ubuntu+FreeBSD machine over the network so I could install the scripts and *systemd* units without typing them all over again.
+
+The GRUB setup was much friendlier on Debian, allowing a five-second view of the menu before proceeding.  I changed it to 30 seconds to match what I had previously.
+
+#+begin_src sh
+  sudo sed -i -e '/GRUB_TIMEOUT=/s/=.*/=30/' /etc/default/grub
+  sudo update-grub
+#+end_src
+
+Time to attend to the other half.
+
+*** A new machine part 2: FreeBSD
+
+I only needed to add one partition to the GPT via the FreeBSD installer:
+
+#+begin_src sh
+  gpart add -t freebsd-zfs -l freebsd-zfs da0
+#+end_src
+
+And that would be dedicated to the operating system.  I created a storage pool within this partition and the approximately-standard group of datasets.  This time we could add =/boot/efi= to =/etc/fstab= in addition to the designated swap area before we let the installer have its way.
+
+#+begin_src sh
+  cat >>/tmp/bsdinstall_etc/fstab <<EOF
+      /dev/da0p1			/boot/efi	msdosfs	rw,sync,noatime,-m=600,-M=700	2	2
+      /dev/da0p4			none	swap	sw	0	0
+  EOF
+#+end_src
+
+When adding users to the system, I chose my UID to match what Debian had gave me (1000).
+
+After the install, the system rebooted immediately into FreeBSD.  Which was not bad but not what I expected.
+
+*** A new machine part 3: GRUB-free booting
+
+Messing with the partition table didn't help.  It was booting off the correct partition already, the EFI file systems.  The FreeBSD installer had noticed that =/boot/efi= was writeable, so it dropped its own EFI boot loader into the key position of =EFI/boot/bootx64.efi=.  How did I discover this?  Mostly by comparing file lengths of the files within that partition.
+
+To remind myself how to fix the situation, I referred to the previous experiment with Ubuntu and examined its =/boot/efi= file system, before settling on the following procedure:
+
+#+begin_src sh
+  cp /boot/efi/EFI/debian/shimx64.efi /boot/efi/EFI/boot/bootx64.efi
+  cp /boot/efi/EFI/debian/fbx64.efi /boot/efi/EFI/boot/
+  cp /boot/efi/EFI/debian/mmx64.efi /boot/efi/EFI/boot/  
+#+end_src
+
+And after a reboot I was indeed presented with GRUB.  So I booted back into FreeBSD and copied the FreeBSD-related files from the other machine to install them.
+
+After a few reboots back and forth I found that I had indeed reproduced the setup; the =zdata= pool imported properly every time, and the datasets within it mounted at the desired locations.
+
+*** Putting the lessons to use
+
+I don't think I have anything on the hobby PC that strictly relies upon Ubuntu being Ubuntu.  It does make certain applications easier to obtain, but all the applications I care about for the hobby are generally Linux-friendly, so changing out Ubuntu for Debian seems plausible.  I might even get some more fine-grained control over how the resulting machine looks.
+
+I have a 500 GB USB SSD lying around, not seeing a lot of use.  Perhaps I could create a ZFS storage pool on it, back up the existing hobby PC to it, and use that as a starting point for a rebuild.
 
 *** Final products
+
+Reward yourself with a festive beverage for reading this far!  If you want to see the various artifacts that came out of this experiment, browse the [[https://github.com/tnalpgge/multiple-personality-zfs][repository]].
+
+*** Footnotes
+
+[fn:4] You may translate the redacted word as "stupidly" if you wish.
 
 **** Ubuntu
 
@@ -518,6 +723,3 @@ This script assumes you have the previously-mentioned files in place already.
   sysrc zfs_shared_enable=YES zfs_shared_datasets=zdata
 #+end_src
 
-*** Footnotes
-
-[fn:1] "GPT partition table" is a redundant phrase.
