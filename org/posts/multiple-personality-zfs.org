@@ -13,9 +13,9 @@ So the hobby is kind of niche.  And the people who use [[https://unix.org/][UNIX
 
 I have spread story of this journey across a series of posts:
 - *[[file:../mpzfs-0-questionable-idea][Part 0: A Questionable Idea]]* \Leftarrow you are here
-- [[file:../mpzfs-1-switching-personalities][Part 1: Switching Personalities]]
-- [[file:../mpzfs-2-export-import-business][Part 2: The Export/Import Business]]
-- [[file:../mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]
+# - [[file:../mpzfs-1-switching-personalities][Part 1: Switching Personalities]]
+# - [[file:../mpzfs-2-export-import-business][Part 2: The Export/Import Business]]
+# - [[file:../mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]
 
 *** Background
 
@@ -147,7 +147,8 @@ I had arrived at this GPT:
 
 I had assumed at this point that I was doing quite well.  It wasn't a terrible assumption, but it wasn't that great either.  Why?  Because I hadn't yet wrestled with the elephant in the room: easily booting one computer into either operating system without relying upon install media.
 
-We'll start that wrestling match in the [[file:../mpzfs-1-switching-personalities][next post in the series]].
+# We'll start that wrestling match in the [[file:../mpzfs-1-switching-personalities][next post in the series]].
+We'll start that wrestling match in the next post in the series.
 
 *** Footnotes
 
@@ -161,8 +162,8 @@ We'll start that wrestling match in the [[file:../mpzfs-1-switching-personalitie
 I have spread story of this journey across a series of posts:
 - [[file:../mpzfs-0-questionable-idea][Part 0: A Questionable Idea]]
 - *[[file:../mpzfs-1-switching-personalities][Part 1: Switching Personalities]]* \Leftarrow you are here
-- [[file:../mpzfs-2-export-import-business][Part 2: The Export/Import Business]]
-- [[file:../mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]  
+# - [[file:../mpzfs-2-export-import-business][Part 2: The Export/Import Business]]
+# - [[file:../mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]  
 
 *** Things are so much easier with cloud servers
 
@@ -234,7 +235,9 @@ I rebooted from FreeBSD media and reinstalled yet again, partitioning in the she
 
 Which turns out to be the winning combination as far as partitions go.  After a few more laps with the now-visible GRUB menu and command line, I refined the particular menu entry for FreeBSD so that it worked consistently.
 
-In the [[file:../mpzfs-2-export-import-business][next part of the series]], we move back to the more important stuff again: actually dealing with [[https://en.wikipedia.org/wiki/ZFS][ZFS]].  You know, the whole point of this whole exercise?
+# In the [[file:../mpzfs-2-export-import-business][next part of the series]], we move back to the more important stuff again: actually dealing with [[https://en.wikipedia.org/wiki/ZFS][ZFS]].  You know, the whole point of this whole exercise?
+In the next part of the series, we move back to the more important stuff again: actually dealing with [[https://en.wikipedia.org/wiki/ZFS][ZFS]].  You know, the whole point of this whole exercise?
+
 
 ** Multiple Personality ZFS Part 2: The Export/Import Business
 :PROPERTIES:
@@ -246,7 +249,7 @@ I have spread story of this journey across a series of posts:
 - [[file:../mpzfs-0-questionable-idea][Part 0: A Questionable Idea]]
 - [[file:../mpzfs-1-switching-personalities][Part 1: Switching Personalities]] 
 - *[[file:../mpzfs-2-export-import-business][Part 2: The Export/Import Business]]* \Leftarrow you are here
-- [[file:../mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]  
+# - [[file:../mpzfs-3-no-special-snowflakes][Part 3: No Special Snowflakes]]  
   
 *** Now back to the important stuff
 
@@ -331,7 +334,8 @@ In particular, proper use of =Requires=, =After=, and =WantedBy= got me the orde
 :XXX_doublecheck: basically this entire table
 :END:
 
-But does it reproduce?  All this work is worth approximately /bupkis/ if nobody can reproduce it.[fn:3]  We'll try to answer that in the [[file:../mpzfs-3-no-special-snowflakes][conclusion of the series]].
+# But does it reproduce?  All this work is worth approximately /bupkis/ if nobody can reproduce it.[fn:3]  We'll try to answer that in the [[file:../mpzfs-3-no-special-snowflakes][conclusion of the series]].
+# But does it reproduce?  All this work is worth approximately /bupkis/ if nobody can reproduce it.[fn:3]  We'll try to answer that in the conclusion of the series.
 
 *** Footnotes
 
