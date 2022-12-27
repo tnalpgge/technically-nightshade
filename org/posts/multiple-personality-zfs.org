@@ -79,7 +79,7 @@ ZFS does not need the traditional ~/etc/fstab~ method to get everything mounted.
 
 *** What would Ubuntu do?
 
-Let's repeat the exercise with Ubuntu 22.04 LTS, using their server install media.  Linux calls the first SCSI disk =sda=, with the partitions within it being =sda1=, =sda2=, etc.  (The first SATA disk would be =hda=, and the first partition within it =hda1=.)
+Let's repeat the exercise with Ubuntu 22.04 LTS "Jammy Jellyfish," using their server install media.  Linux calls the first SCSI disk =sda=, with the partitions within it being =sda1=, =sda2=, etc.  (The first SATA disk would be =hda=, and the first partition within it =hda1=.)
 
 #+begin_example
 # fdisk -l /dev/sda
