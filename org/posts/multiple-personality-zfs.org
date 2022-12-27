@@ -99,6 +99,7 @@ I assumed that creating a new storage pool under Ubuntu would be more likely to 
 #+begin_src sh
   apt install zfsutils-linux
   zpool create zdata /dev/sdb
+  zfs create -o mountpoint=/zhome zdata/home
 #+end_src
 
 Now how does the partition table on =sdb= look?
@@ -326,6 +327,9 @@ In particular, proper use of =Requires=, =After=, and =WantedBy= got me the orde
 | =zfs-shared.service=   |         | ~Requires=zpool-shared.target~  |
 | =zfs-shared.service=   |         | ~After=zpool-shared.target~     |
 | =zfs-shared.service=   |         | ~WantedBy=multi-user.target~    |
+:PROPERTIES:
+:XXX_doublecheck: basically this entire table
+:END:
 
 But does it reproduce?  All this work is worth approximately /bupkis/ if nobody can reproduce it.[fn:3]  We'll try to answer that in the [[file:../mpzfs-3-no-special-snowflakes][conclusion of the series]].
 
@@ -349,13 +353,24 @@ I have spread story of this journey across a series of posts:
   
 *** But does it reproduce?
 
-My co-workers know me as a person who likes command lines, and whose definition of a "one-liner" may be a bit...expansive at times.  So could I replicate the results in a slightly different environment, with fewer frills, with fewer graphical installs, and with more typing?  Let's replace Ubuntu 22.04 LTS "Jammy Jellyfish" with [[https://www.debian.org/][Debian]] 11 "Bullseye," selecting only the most basic options, and see if we can make it work.
+My co-workers know me as a person who likes command lines, and whose definition of a [[https://www.perl.com/article/perl-one-liners-part-1/]["one-liner"]] may be a bit...expansive at times.  So could I replicate the results in a slightly different environment, with fewer frills, with fewer graphical installs, and with more typing?  Let's replace [[https://ubuntu.com/][Ubuntu]] 22.04 LTS "Jammy Jellyfish" with [[https://www.debian.org/][Debian]] 11 "Bullseye," selecting only the most basic options, and see if we can make it work.
 
-In particular, there is no distinction between a server and a desktop, you get the features you ask for and you don't get the features you don't.  (We're keeping FreeBSD in every iteration of this experiment, thank you very much!)
+In particular, there is no distinction between a server and a desktop, you get the features you ask for and you don't get the features you don't.  (We're keeping [[https://www.freebsd.org/][FreeBSD]] in /every/ iteration of this experiment, thank you very much!)
 
 *** A new machine part 1: Debian
 
-I created a new virtual machine that had the same shape and size, but with fresh disks of its own.  I ran through the Debian installer in a fairly straightforward form, and manually chose a set of disk partitions that consumed half the disk.  They looked like this:
+I created a new virtual machine that had the same shape and size, but with fresh disks of its own:
+
+- 8 GB of memory
+- 2 virtual CPUs
+- an [[https://en.wikipedia.org/wiki/Ethernet][ethernet]] network interface
+- a 40 GB [[https://en.wikipedia.org/wiki/SCSI][SCSI]] hard drive for operating systems
+- a 20 GB SCSI hard drive for the shared data
+- no sound card
+- no camera
+- [[https://en.wikipedia.org/wiki/UEFI][UEFI]] firmware
+
+I ran through the Debian installer in a fairly straightforward form, and manually chose a set of disk partitions that consumed half the disk.  They looked like this:
 
 | Index | Size  | Filesystem | Mount point | Name       | Purpose              |
 |-------+-------+------------+-------------+------------+----------------------|
@@ -364,13 +379,13 @@ I created a new virtual machine that had the same shape and size, but with fresh
 |     3 | 18 GB | linux-lvm  | see below   | linux-lvm  | Linux LVM            |
 |     4 | 2 GB  | swap       | (none)      | swap       | Swap                 |
 
-And within the LVM partition =/dev/sda3/=:
-- One single volume group =vg0=, consuming as much as possible
-- One single logical Volume =lv0=, consuming all of =vg0=, mounted at =/=
+Within the [[https://sourceware.org/lvm2/][LVM]] partition =/dev/sda3= I created:
+- One single volume group =vg0=, consuming as much as possible;
+- One single logical Volume =lv0=, consuming as much as possible, mounted at =/=.
 
 The rest of the disk would be consumed by FreeBSD.
 
-I had +brilliantly+[fn:4] declined to install the common system utilities.  When I finally rebooted into this fresh system, I had to use the *su* utility and a root password -- much like the primitive system administrators of yore -- to reach a tolerable setup where I could use *sudo* and a screen-oriented text editor.  But after that brief ordeal, it was time to install the ZFS packages via the [[https://openzfs.github.io/openzfs-docs/Getting%20Started/Debian/index.html][getting started guide for Debian]].    Examining the system with available text-oriented tools, we see the following.
+I had +brilliantly+[fn:4] declined to install the common system utilities.  When I finally rebooted into this fresh system, I had to use the *su* utility and a root password -- much like the primitive system administrators of yore -- to reach a tolerable setup where I could use *sudo* and a screen-oriented text editor.  But after that brief ordeal, it was time to install the [[https://en.wikipedia.org/wiki/ZFS][ZFS]] packages via the [[https://openzfs.org/][OpenZFS]] project's [[https://openzfs.github.io/openzfs-docs/Getting%20Started/Debian/index.html][getting started guide for Debian]].  Examining the system with available text-oriented tools, I saw the following:
 
 #+begin_example
 $ lsblk
@@ -386,6 +401,11 @@ sdb           8:16   0   20G  0 disk
 `-sdb9        8:25   0    8M  0 part
 sr0           11:0   1 1024M  0 rom
 #+end_example
+:PROPERTIES:
+:XXX_doublecheck: MOUNTPOINT for sda3
+:END:
+
+This looks like a reasonable arrangement of block storage devices.  What can it tell us about the partition table?
 
 #+begin_example
 $ sudo partx -s /dev/sda
@@ -396,7 +416,15 @@ NR    START      END  SECTORS  SIZE NAME       UUID
  4 41015296 44920831  3905536  1.9G swap       ...
 #+end_example
 
-Creation of the =zdata= storage pool on =sdb1= and the =zdata/home= dataset within it were straightforward, and identical to what we did earlier.
+That also looks good.
+
+I created the =zdata= storage pool on =sdb1= and the =zdata/home= dataset within it:
+
+#+begin_src sh
+  zpool create zdata /dev/sdb
+#+end_src
+
+Examining the partition table on =sdb=:
 
 #+begin_example
 $ sudo partx -s /dev/sdb
@@ -405,13 +433,19 @@ NR    START      END  SECTORS SIZE NAME                 UUID
  9 41924608 41940991    16384  8M                       ...
 #+end_example
 
+It was consistent with what we saw before on the Ubuntu machine.
+
 #+begin_example
 $ zpool list
 NAME    SIZE  ALLOC   FREE CKPOINT  EXPANDSZ   FRAG    CAP  DEDUP    HEALTH  ALTROOT
 zdata  19.5G   184K  19.5G       -         -     0%     0%  1.00x    ONLINE  -
 #+end_example
 
-Our datasets have indeed been created:
+So I created a dataset and proved it was what I wanted:
+
+#+begin_src sh
+  zfs create -o mountpoint=/zhome zdata/home
+#+end_src
 
 #+begin_example
 $ zfs list
@@ -420,7 +454,7 @@ zdata        184K  18.9G       24K  /zdata
 zdata/home  24.5K  18.9G     24.5K  /zhome
 #+end_example
 
-And they have been mounted as well:
+The data sets were mounted as well.
 
 #+begin_example
 $ df
@@ -443,28 +477,28 @@ $ mount | grep /boot/efi
 /dev/sda1 on /boot/efi type vfat (rw,relatime,fmask=0077,dmask=0077,codepage=437,iocharset=ascii,shortname=mixed,utf8,errors=remount-ro)
 #+end_example
 
-What Debian calls =vfat= FreeBSD calls =msdosfs=, which can be mounted and written natively.  So hopefully we won't have to engage in a manual step to get the FreeBSD boot loader executable in place.
+What Debian calls =vfat= FreeBSD calls =msdosfs=, which can be mounted and written natively by the operating system, without adding any external packages.  So hopefully we won't have to engage in a manual step to get the FreeBSD boot loader executable in place.
 
 I proceeded to copy files from the Ubuntu+FreeBSD machine over the network so I could install the scripts and *systemd* units without typing them all over again.
 
-The GRUB setup was much friendlier on Debian, allowing a five-second view of the menu before proceeding.  I changed it to 30 seconds to match what I had previously.
+The [[https://www.gnu.org/software/grub/][GRUB]] setup was much friendlier on Debian, allowing a five-second view of the menu before proceeding.  I changed it to 30 seconds to match what I had previously.
 
 #+begin_src sh
   sudo sed -i -e '/GRUB_TIMEOUT=/s/=.*/=30/' /etc/default/grub
   sudo update-grub
 #+end_src
 
-Time to attend to the other half.
+Time to attend to the other half of the machine.
 
 *** A new machine part 2: FreeBSD
 
-I only needed to add one partition to the GPT via the FreeBSD installer:
+I only needed to add one partition to the [[https://en.wikipedia.org/wiki/GUID_Partition_Table][GPT]] via the FreeBSD installer:
 
 #+begin_src sh
   gpart add -t freebsd-zfs -l freebsd-zfs da0
 #+end_src
 
-And that would be dedicated to the operating system.  I created a storage pool within this partition and the approximately-standard group of datasets.  This time we could add =/boot/efi= to =/etc/fstab= in addition to the designated swap area before we let the installer have its way.
+And that would be dedicated to the operating system.  I created a storage pool within this partition and the approximately-standard group of datasets.  (It's a long script but not presented here.)  This time we could add =/boot/efi= to =/etc/fstab= in addition to the designated swap area before we let the installer have its way.
 
 #+begin_src sh
   cat >>/tmp/bsdinstall_etc/fstab <<EOF
@@ -479,7 +513,14 @@ After the install, the system rebooted immediately into FreeBSD.  Which was not 
 
 *** A new machine part 3: GRUB-free booting
 
-Messing with the partition table didn't help.  It was booting off the correct partition already, the EFI file systems.  The FreeBSD installer had noticed that =/boot/efi= was writeable, so it dropped its own EFI boot loader into the key position of =EFI/boot/bootx64.efi=.  How did I discover this?  Mostly by comparing file lengths of the files within that partition.
+Messing with the partition table didn't help.  It was booting off the correct partition already, the EFI file system.  The FreeBSD installer had noticed that =/boot/efi= was writeable, so it dropped its own EFI boot loader into the key position of =EFI/boot/bootx64.efi=.  How did I discover this?  Mostly by comparing file lengths of the files within that partition:
+
+#+begin_src sh
+  find /boot/efi -type f -iname '*.efi' -ls
+#+end_src
+:PROPERTIES:
+:XXX_doublecheck: casing and sorting
+:END:
 
 To remind myself how to fix the situation, I referred to the previous experiment with Ubuntu and examined its =/boot/efi= file system, before settling on the following procedure:
 
