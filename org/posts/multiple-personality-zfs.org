@@ -56,7 +56,7 @@ This experiment should work with any [[https://en.wikipedia.org/wiki/Hypervisor]
 
 I'll start by installing FreeBSD 13.1-RELEASE in the standard way from the usual downloadable ISO image, telling it to use the entirety of the first disk as a ZFS storage pool.  Then I'll see what the resulting [[https://en.wikipedia.org/wiki/GUID_Partition_Table][GPT]] looks like.[fn:1]
 
-FreeBSD calls the first SCSI disk ~da0~, and the various GPT partitions within it ~da0p1~, ~da0p2~, etc.  (For SATA the device names would be ~ada0~ for the disk itself and ~ada0p1~ for the first partition on it.)
+FreeBSD calls the first SCSI disk ~da0~, and the various GPT partitions within it ~da0p1~, ~da0p2~, etc.  (For SATA the device names would be ~ada0~ for the disk itself and ~ada0p1~ for the first GPT partition on it.)
 
 #+begin_example
 # gpart show da0
@@ -78,7 +78,7 @@ ZFS does not need the traditional ~/etc/fstab~ method to get everything mounted.
 
 *** What would Ubuntu do?
 
-Let's repeat the exercise with Ubuntu 22.04 LTS "Jammy Jellyfish," using their server install media.  Linux calls the first SCSI disk =sda=, with the partitions within it being =sda1=, =sda2=, etc.  (The first SATA disk would be =hda=, and the first partition within it =hda1=.)
+Let's repeat the exercise with Ubuntu 22.04 LTS "Jammy Jellyfish," using their server install media.  Linux calls the first SCSI disk =sda=, with the partitions within it being =sda1=, =sda2=, etc.  (The device names appear to be the same for SATA disks.)
 
 #+begin_example
 # fdisk -l /dev/sda
