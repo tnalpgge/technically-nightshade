@@ -1,0 +1,196 @@
+#+hugo_base_dir: ../..
+* Posts
+** TODO Heirloom NPCs                                                 :troff:
+:PROPERTIES:
+:EXPORT_DATE: 2023-11-20
+:EXPORT_FILE_NAME: heirloom-npcs
+:END:
+
+
+Uh oh.  I created an NPC for this role-playing game adventure scenario that I'm working on, but for whatever reason, I need to change something about them.  They fulfill the same function in the scenario, but maybe they can't be the same race, gender, or occupation anymore, so obviously their name must change as well.
+
+Let's consider these hypothetical sentences from a role-playing game scenario.
+
+#+begin_src nroff
+  Sephigolas Angs't'bow, elven ranger, hears of the party's plan and
+  travels to the trading post through the wilderness.  He uses his
+  considerable skill in navigating forests to reach his destination a
+  full day in advance of the party.
+#+end_src
+
+Oops, the party is so full of non-humans already that seeing another elf in a forest wouldn't really be remarkable.  But maybe one of those shorter-lived, brightly-burning humans might attract the player's interest more.  And perhaps make that human someone ill-suited to wilderness travel, to make it all the more interesting when they see who arrived first.  
+
+Global search-and-replace isn't going to work here, because these are far from the only sentences in our document.  But if we treat the document a little more like a program, and start to separate concerns, this is an easy situation to navigate.
+
+First, let's figure out what function this NPC fulfills in the scenario, and give them some moniker or identifier.  In this case, let's call them The Rival.  Let's pick a tolerably small number of characters that tell us when we are referring to The Rival, perhaps ~RIVL~.  (We could choose ~RIVAL~ but in the documents I write, I've settled on a four-character convention.  I'm not working around a technological limitation here.)  We're going to glue this identifier to other identifiers so not only do we know who we're writing about, but which of their aspects of that character we are using in our writing.  Just from our example sentences we are already using:
+
+- Their name
+  - given name
+  - surname
+- Their gender
+  - subjective pronoun, capitalized
+  - possessive adjective
+- Their species, in adjective form
+- Their occupation, in noun form
+
+Since I write my scenarios in [[https://n-t-roff.github.io/heirloom/doctools][Heirloom Documentation Tools]], we're firmly in the land of plain text here.  And the sentences above are a perfectly valid starting point.  Extracting out the character's name is easy enough by defining them as separate strings.  Let's arbitrarily pick ~sn~ to indicate a surname or family name, and ~gn~ to indicate an individual's given (or self-chosen) name.
+
+(I don't use exactly these conventions for my predefined strings.  Mine grew organically as I have been writing, and I expect that they will continue to evolve as I write more.  For example, ~sp~ is a regional name for the silver piece, so ~SP~ is the subjective pronoun, and ~csp~ its capitalized version.  But the underlying principles are still the same.  This post demonstrates how I might rearrange the conventions if I were reimplementing the scheme.)
+
+#+begin_src nroff
+  .ds snRIVL Angs\(aqt\(aqbow
+  .ds gnRIVL Sephigolas
+#+end_src
+
+So we get to change our sentences to:
+
+#+begin_src nroff
+  \*[gnRIVL] \*[snRIVL], elven ranger, hears of the party's plan and
+  travels to the trading post through the wilderness.  He uses his
+  considerable skill in navigating forests to reach his destination a
+  full day in advance of the party.	  
+#+end_src
+
+We're also using ~\(aq~ to represent an apostrophe because sometimes an apostrophe is not just an apostrophe in =troff=.  Perhaps we can tackle their species next.  This example only uses the adjective form, but it's very likely we'll need the noun form eventually.  And capitalized forms of both as well.  Since ~sn~ is already taken for surnames, let's use ~rn~ for "race name."  Not my favorite nomenclature, but that's the term that the official hard-bound books use.  This implies ~ra~ for "race adjective."  As for the capitalized forms, how about ~Rn~ and ~Ra~ respectively?
+
+#+begin_src nroff
+    .ds rnRIVL elf
+    .ds raRIVL elven
+    .ds RnRIVL Elf
+    .ds RnRIVL Elven
+#+end_src
+
+So now our sentences look like:
+
+#+begin_src nroff
+    \*[gnRIVL] \*[snRIVL], \*[raRIVL] ranger, hears of the party's plan and
+    travels to the trading post through the wilderness.  He uses his
+    considerable skill in navigating forests to reach his destination a
+    full day in advance of the party.
+#+end_src
+
+Well so far we've grown the input without growing the output.  And I have a feeling that will continue for a while.  Let's roll with it anyway, since plain text doesn't take up very much space.  What is this character's occupation?  Let's use ~oc~ for it.
+
+#+begin_src nroff
+  .ds ocRIVL ranger
+#+end_src
+#+begin_src nroff
+  \*[gnRIVL] \*[snRIVL], \*[raRIVL] \*[ocRIVL], hears of the party's plan and
+  travels to the trading post through the wilderness.  He uses his
+  considerable skill in navigating forests to reach his destination a
+  full day in advance of the party.
+#+end_src
+
+Next up, the dreaded subjective pronoun and possessive adjective.  This is where some of you may undoubtedly start tripping up over pronouns as politics, and I assure you I am only trying to solve a technical problem here: rapidly changing many attributes of a character, where global search-and-replace would clearly mess up, by changing as few places as possible.
+
+The sentences above only use the subjective pronoun (capitalized) and the possessive adjective.  So while that may suffice for this example, if the character exists for more than two sentences it is likely that you will need to full complement.  We'll simplify down to merely four cases, but if your world has more, go for it.
+
+  - subjective pronoun ~sp~ (he, she, they, it) or capitalized ~Sp~
+  - possessive adjective ~pa~ (his, her, their, its) or capitalized ~Pa~
+  - objective pronoun ~op~ (him, her, them, it)
+  - reflexive pronoun ~rp~ (himself, herself, themselves, itself)
+  - possessive pronoun ~pp~ (his, hers, theirs, its)
+
+  It is very rare to use the objective, reflexive, or possessive pronouns in a position where they may need to be capitalized, so for brevity I won't display them.  But if for some reason you need them, you can easily extend the model we're building here.
+
+  Rather than type them all out individually for each character, I think I'd rather write macros to compute them based on an argument.  Two arguments, actually.  The first argument being the moniker of the character we are building, the second being their subjective pronoun, not capitalized.
+
+  #+begin_src nroff
+    .de PRONOUNS
+    .\" moniker subjective
+    .ds sp\\$1 \\$2
+    .if '\\$2'he' \{\
+    .ds Sp\\$1 He
+    .ds pa\\$1 his
+    .ds Pa\\$1 His
+    .ds op\\$1 him
+    .ds rp\\$1 \\*[op\\$1]self
+    .ds pp\\$1 \\*[pa\\$1]
+    \}
+    .if '\\$2'it' \{\
+    .ds Sp\\$1 It
+    .ds pa\\$1 its
+    .ds Pa\\$1 Its
+    .ds op\\$1 \\$2
+    .ds rp\\$1 \\$2self
+    .ds pp\\$1 \\*[pa\\$1]
+    \}	
+    .if '\\$2'she' \{\
+    .ds Sp\\$1 She
+    .ds pa\\$1 her
+    .ds Pa\\$1 Her
+    .ds op\\$1 \\*[pa\\$1]
+    .ds rp\\$1 \\*[pa\\$1]self
+    .ds pp\\$1 \\*[pa\\$1]s
+    \}	
+    'if '\\$2'they' \{\
+    .ds Sp\\$1 They
+    .ds pa\\$1 their
+    .ds Pa\\$1 Their
+    .ds op\\$1 them
+    .ds rp\\$1 \\*[op\\$1]selves
+    .ds pp\\$1 \\*[pa\\$1]s
+    \}
+    ..	
+#+end_src
+
+There is enough variation here between these four cases that it is difficult to [[https://en.wikipedia.org/wiki/Don%27t_repeat_yourself][DRY]] things too much.  And although we have a fair number of string manipulations at our disposal, substrings are painful and case shifts are next to impossible, so it's probably best just to type them out.
+
+There is also a fair amount of "metaprogramming" with extra backslashes delaying evaluation of things, so we can dynamically construct all those predefined strings.  It doesn't matter if the strings are defined when we define the macro; it matters that they are defined when we invoke it.  This gives us flexibility in how we organize our document's source files.
+
+Now we can invoke that macro:
+
+#+begin_src
+  .PRONOUNS RIVL he
+#+end_src
+
+Our sentences have now become:
+
+#+begin_src nroff
+    \*[gnRIVL] \*[snRIVL], \*[raRIVL] \*[ocRIVL], hears of the party's plan and
+    travels to the trading post through the wilderness.  \*[SpRIVL] uses \*[paRIVL]
+    considerable skill in navigating forests to reach \*[paRIVL] destination a
+    full day in advance of the party.
+#+end_src
+
+Are we done yet?  Possibly not.  Remember that the character we are about to change doesn't have a defined gender, we can't reasonably use /he/ or /she/ to describe /them/ yet.  A player at one of my tables prefers /they/ and /them/ for their characters and for themselves.  So it's settled then; this character that we are about to change prefers /they/ as their subjective pronoun.  Which means we have to reckon with the matter of verb inflection.  Even though /he, she,/ and /it/ would take the verb /uses/ in the present tense indicative, /they uses/ sounds awkward in English.  We must change to /they use/.  But in a way that if we decide to change course again, we won't have to hunt down every darn verb in the document.
+
+Time for another macro!  We use the simplifying assumption for English that many verbs inflect regularly in the third-person present-tense indicative.  On the off chance that we have to use an irregular verb, we can supply an extra argument to state that verb explicitly.
+
+#+begin_src nroff
+  .de VERBCHOICE
+  '\" moniker they-form [he-she-it-form]
+  .ie '\\*[sp\\$1]'they' \\$2
+  .el .ie '\\$3'' \\$2s
+  .el \\$3
+  ..
+#+end_src
+
+We must update our sentences again.  Note we don't need to change /travels/ in the first sentence, because the proper name of the character is the subject.  Only the second sentence, where a pronoun is the subject, needs this treatment.
+
+#+begin_src nroff
+  \*[gnRIVL] \*[snRIVL], \*[raRIVL] \*[ocRIVL], hears of the party's plan and
+  travels to the trading post through the wilderness.  \*[SpRIVL]
+  .VERBCHOICE RIVL use
+  \*[paRIVL]
+  considerable skill in navigating forests to reach \*[paRIVL] destination a
+  full day in advance of the party.
+#+end_src
+
+We've defined two macros and a lot of strings, and interpolated those strings into our original sentences, for a net effect of absolutely zero.  Because we haven't changed anything about the character yet.  And now, the moment I've been waiting for.  I'm tired of his stupid and overly tropey name, and I think the NPC would be much more compelling to my adventuring group in a totally revised form.  (That's probably overly tropey in a different direction, but far more palatable to me as the writer of this scenario.)
+
+#+begin_src
+  .de gnRIVL Khibaris
+  .ds snRIVL Stickerburr
+  .ds raRIVL halfling
+  .ds ocRIVL druid
+  .PRONOUNS RIVL they
+#+end_src
+
+Changing these five lines handles the eight changes in our original two sentences.  /And anywhere else in the document they happen to appear./  Because you've decided to treat your document as a program that produces correct text, you don't need to do global search and replace.  You told =troff= how about your intentions, and it output correct results.
+
+One of the other weird advantages of this scheme -- well, it's an advantage from my point of view, at least -- is that /you can't get lost in a maze of twisty little pronouns./  You always know who matches up with the placeholders.  The reader might have to figure out what refers to whom in the final output, but as the writer, the relationships are laid bare to you.  (And you'd better be able to keep track of them, you're the writer!  The characters can't hide from you!)
+
+One of the disadvantages is that making a typo when referring to one of your predefined strings, e.g. ~\*[gnRIVA]~ will produce an empty spot in the output where you might otherwise expect to see something.  This isn't a disadvantage of the scheme, it's a disadvantage of using anything like =troff=.  At the moment I don't know if there is a way to automatically catch uses of undefined strings when building your document, but as part of writing it, you are probably going back and proofreading the typeset version anyway.  Possibly even frequently.
+
+
